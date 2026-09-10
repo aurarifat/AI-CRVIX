@@ -57,6 +57,13 @@ class DeviceActionExecutor(
 
         val outcome = try {
             when (intentUpper) {
+                ActionRegistry.INTENT_SEND_WHATSAPP -> sendWhatsApp(action)
+                ActionRegistry.INTENT_SEND_SMS -> sendSms(action)
+                ActionRegistry.INTENT_CALL_PHONE -> callPhone(target)
+                ActionRegistry.INTENT_SEARCH_WEB -> searchWeb(target.ifBlank { action.message })
+                ActionRegistry.INTENT_OPEN_URL -> openUrl(target)
+                ActionRegistry.INTENT_PLAY_YOUTUBE -> playYouTube(target)
+                ActionRegistry.INTENT_OPEN_ACCESSIBILITY_SETTINGS -> openAccessibilitySettings()
                 ActionRegistry.INTENT_OPEN_APP -> launchApp(target)
                 ActionRegistry.INTENT_OPEN_YOUTUBE -> launchYouTube()
                 ActionRegistry.INTENT_OPEN_CHROME -> launchChrome()
@@ -280,24 +287,208 @@ class DeviceActionExecutor(
         }
     }
 
+    private fun isPackageInstalled(pm: PackageManager, packageName: String): Boolean {
+        return try {
+            pm.getPackageInfo(packageName, 0)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun sendWhatsApp(action: ParsedAction): ExecutionOutcome {
+        val rawTarget = action.target.trim()
+        val message = action.message.trim().ifBlank {
+            if (rawTarget.contains(":")) rawTarget.substringAfter(":").trim() else ""
+        }
+        val recipient = if (rawTarget.contains(":")) rawTarget.substringBefore(":").trim() else rawTarget
+
+        val resolvedPhone = ContactHelper.resolvePhoneNumber(context, recipient)
+
+        val pm = context.packageManager
+        val hasWhatsApp = isPackageInstalled(pm, "com.whatsapp")
+        val hasWhatsAppBusiness = isPackageInstalled(pm, "com.whatsapp.w4b")
+        val waPackage = if (hasWhatsApp) "com.whatsapp" else if (hasWhatsAppBusiness) "com.whatsapp.w4b" else null
+
+        if (MayaAccessibilityService.isRunning()) {
+            MayaAccessibilityService.queueAutoSend(waPackage ?: "com.whatsapp")
+        }
+
+        val encodedMsg = Uri.encode(message)
+
+        return try {
+            if (!resolvedPhone.isNullOrBlank()) {
+                val cleanPhone = resolvedPhone.filter { it.isDigit() }
+                val waUri = Uri.parse("https://api.whatsapp.com/send?phone=$cleanPhone&text=$encodedMsg")
+                val intent = Intent(Intent.ACTION_VIEW, waUri).apply {
+                    if (waPackage != null) setPackage(waPackage)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                val statusText = if (MayaAccessibilityService.isRunning()) "Auto-sending message..." else "Opened WhatsApp chat with pre-filled message."
+                ExecutionOutcome(
+                    true,
+                    "Messaging $recipient on WhatsApp: \"$message\". $statusText",
+                    "Successful",
+                    "Target phone: $cleanPhone"
+                )
+            } else {
+                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, message)
+                    if (waPackage != null) setPackage(waPackage)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+
+                if (sendIntent.resolveActivity(pm) != null) {
+                    context.startActivity(sendIntent)
+                    ExecutionOutcome(
+                        true,
+                        "Opened WhatsApp for $recipient with message: \"$message\"",
+                        "Successful",
+                        "Pre-filled message in WhatsApp"
+                    )
+                } else {
+                    val webUri = Uri.parse("https://api.whatsapp.com/send?text=$encodedMsg")
+                    val webIntent = Intent(Intent.ACTION_VIEW, webUri).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(webIntent)
+                    ExecutionOutcome(
+                        true,
+                        "Opened WhatsApp with message: \"$message\"",
+                        "Successful"
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            if (waPackage != null) {
+                val launchIntent = pm.getLaunchIntentForPackage(waPackage)
+                if (launchIntent != null) {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(launchIntent)
+                    return ExecutionOutcome(true, "Opened WhatsApp. Please send message to $recipient: \"$message\"", "Successful")
+                }
+            }
+            ExecutionOutcome(false, "Could not open WhatsApp: ${e.message}", "Error", e.localizedMessage ?: "")
+        }
+    }
+
+    private fun sendSms(action: ParsedAction): ExecutionOutcome {
+        val recipient = action.target.trim()
+        val message = action.message.trim()
+        val resolvedPhone = ContactHelper.resolvePhoneNumber(context, recipient) ?: recipient
+
+        val uri = if (resolvedPhone.isNotBlank()) {
+            Uri.parse("smsto:${Uri.encode(resolvedPhone)}")
+        } else {
+            Uri.parse("smsto:")
+        }
+        val smsIntent = Intent(Intent.ACTION_SENDTO, uri).apply {
+            putExtra("sms_body", message)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(smsIntent)
+            ExecutionOutcome(true, "Opened SMS for $recipient with message: \"$message\"", "Successful")
+        } catch (e: Exception) {
+            ExecutionOutcome(false, "Could not send SMS: ${e.message}", "Error")
+        }
+    }
+
+    private fun callPhone(target: String): ExecutionOutcome {
+        val resolvedPhone = ContactHelper.resolvePhoneNumber(context, target) ?: target
+        val cleanPhone = resolvedPhone.filter { it.isDigit() || it == '+' }
+        if (cleanPhone.isBlank()) {
+            return ExecutionOutcome(false, "Could not find a phone number for '$target'", "Blocked")
+        }
+        val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$cleanPhone")).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(dialIntent)
+            ExecutionOutcome(true, "Dialing $target ($cleanPhone)", "Successful")
+        } catch (e: Exception) {
+            ExecutionOutcome(false, "Could not open dialer: ${e.message}", "Error")
+        }
+    }
+
+    private fun searchWeb(query: String): ExecutionOutcome {
+        val url = "https://www.google.com/search?q=${Uri.encode(query)}"
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(intent)
+            ExecutionOutcome(true, "Searching web for: $query", "Successful")
+        } catch (e: Exception) {
+            ExecutionOutcome(false, "Could not perform web search: ${e.message}", "Error")
+        }
+    }
+
+    private fun openUrl(url: String): ExecutionOutcome {
+        val fixedUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) "https://$url" else url
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fixedUrl)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(intent)
+            ExecutionOutcome(true, "Opened $fixedUrl", "Successful")
+        } catch (e: Exception) {
+            ExecutionOutcome(false, "Could not open link: ${e.message}", "Error")
+        }
+    }
+
+    private fun playYouTube(query: String): ExecutionOutcome {
+        val encoded = Uri.encode(query)
+        val appIntent = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:results?search_query=$encoded")).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(appIntent)
+            ExecutionOutcome(true, "Searching YouTube for '$query'", "Successful")
+        } catch (_: Exception) {
+            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$encoded")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(webIntent)
+            ExecutionOutcome(true, "Searching YouTube for '$query'", "Successful")
+        }
+    }
+
+    private fun openAccessibilitySettings(): ExecutionOutcome {
+        MayaAccessibilityService.openAccessibilitySettings(context)
+        return ExecutionOutcome(true, "Opened Accessibility Settings. Enable 'MayaX Agentic Assistant Service' for full automation.", "Successful")
+    }
+
     private fun simulateBack(): ExecutionOutcome {
+        val accessibility = MayaAccessibilityService.instance
+        if (accessibility != null) {
+            val success = accessibility.performBack()
+            return ExecutionOutcome(success, if (success) "Navigated Back" else "Could not perform Back", if (success) "Successful" else "Error")
+        }
         val shizuku = ShizukuManager(context)
         val status = shizuku.getStatus()
         return if (status.isRunning && status.isPermissionGranted) {
             // Simulated back using Shizuku privileged access
             ExecutionOutcome(true, "Navigated Back via Shizuku", "Successful")
         } else {
-            ExecutionOutcome(false, "Shizuku privileged connection required for simulated navigation", "Blocked", "Shizuku not connected")
+            ExecutionOutcome(false, "Enable MayaX Accessibility Service or connect Shizuku for automated navigation", "Blocked", "Service not connected")
         }
     }
 
     private fun simulateRecents(): ExecutionOutcome {
+        val accessibility = MayaAccessibilityService.instance
+        if (accessibility != null) {
+            val success = accessibility.performRecents()
+            return ExecutionOutcome(success, if (success) "Opened Recent Apps" else "Could not open Recents", if (success) "Successful" else "Error")
+        }
         val shizuku = ShizukuManager(context)
         val status = shizuku.getStatus()
         return if (status.isRunning && status.isPermissionGranted) {
             ExecutionOutcome(true, "Opened Recent Apps via Shizuku", "Successful")
         } else {
-            ExecutionOutcome(false, "Shizuku privileged connection required for recent apps", "Blocked", "Shizuku not connected")
+            ExecutionOutcome(false, "Enable MayaX Accessibility Service or connect Shizuku for recent apps", "Blocked", "Service not connected")
         }
     }
 }

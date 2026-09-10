@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -79,6 +81,9 @@ import androidx.compose.ui.unit.sp
 import com.example.data.ai.ProviderSelection
 import com.example.devicecontrol.ActionRegistry
 import com.example.devicecontrol.InstalledAppItem
+import com.example.devicecontrol.MayaAccessibilityService
+import com.example.devicecontrol.ParsedAction
+import com.example.devicecontrol.PermissionManager
 import com.example.ui.MainViewModel
 import com.example.ui.theme.MayaBorder
 import com.example.ui.theme.MayaTextPrimary
@@ -642,7 +647,7 @@ fun SettingsScreen(
 
                         // Speech Speed
                         Column {
-                            Text("Speech Rate: ${String.format("%.1fx", speechRate)}", fontSize = 12.sp)
+                            Text("Speech Rate: ${String.format("%.2fx", speechRate)}", fontSize = 12.sp)
                             Slider(
                                 value = speechRate,
                                 onValueChange = {
@@ -650,7 +655,7 @@ fun SettingsScreen(
                                     prefs.speechRate = it
                                     viewModel.syncVoiceSettings()
                                 },
-                                valueRange = 0.7f..1.5f,
+                                valueRange = 0.7f..1.4f,
                                 colors = SliderDefaults.colors(
                                     thumbColor = MayaYellowPrimary,
                                     activeTrackColor = MayaYellowPrimary
@@ -658,19 +663,41 @@ fun SettingsScreen(
                             )
                         }
 
-                        // Test Voice Button
-                        OutlinedButton(
-                            onClick = {
-                                viewModel.voiceEngine.speak(
-                                    if (voiceLang.startsWith("bn")) "নমস্কার, আমি মায়া এক্স এআই। আপনাকে কীভাবে সাহায্য করতে পারি?"
-                                    else "Hello, I am MayaX AI. How can I help you today?"
+                        // Speech Pitch
+                        Column {
+                            Text("Voice Pitch / Tone: ${String.format("%.2fx", speechPitch)}", fontSize = 12.sp)
+                            Slider(
+                                value = speechPitch,
+                                onValueChange = {
+                                    speechPitch = it
+                                    prefs.speechPitch = it
+                                    viewModel.syncVoiceSettings()
+                                },
+                                valueRange = 0.8f..1.3f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = MayaYellowPrimary,
+                                    activeTrackColor = MayaYellowPrimary
                                 )
-                            },
-                            modifier = Modifier.testTag("test_voice_button")
+                            )
+                        }
+
+                        // Test Voice Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = "Test Speech", modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Test Voice Output")
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.voiceEngine.previewVoice()
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("preview_natural_voice_button")
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = "Natural Preview", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Natural Voice Preview", fontSize = 11.sp)
+                            }
                         }
                     }
                 }
@@ -766,7 +793,108 @@ fun SettingsScreen(
                 }
             }
 
-            // 5. SHIZUKU INTEGRATION
+            // 5. AGENTIC WORK & WHATSAPP AUTOMATION
+            item {
+                SettingsCard(title = "Agentic Work & WhatsApp Automation", icon = "💬") {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "MayaX AI can perform complete multi-step tasks like opening WhatsApp, resolving contacts, and automatically sending messages.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MayaTextSecondary
+                        )
+
+                        // Accessibility Service Status
+                        val isA11yRunning = MayaAccessibilityService.isRunning()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (isA11yRunning) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant,
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (isA11yRunning) "MayaX Accessibility Service: ACTIVE" else "MayaX Accessibility Service: INACTIVE",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = if (isA11yRunning) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (isA11yRunning) "Full auto-send enabled for WhatsApp and UI automations."
+                                    else "Enable in Android Settings to allow MayaX AI to auto-click Send in WhatsApp.",
+                                    fontSize = 11.sp,
+                                    color = MayaTextSecondary
+                                )
+                            }
+                            if (!isA11yRunning) {
+                                Button(
+                                    onClick = {
+                                        viewModel.executeDeviceAction(
+                                            ParsedAction(
+                                                intent = ActionRegistry.INTENT_OPEN_ACCESSIBILITY_SETTINGS,
+                                                target = "Accessibility"
+                                            )
+                                        )
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MayaYellowPrimary,
+                                        contentColor = MayaTextPrimary
+                                    )
+                                ) {
+                                    Text("Enable", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        // App Permissions Status & Grant Button
+                        val permManager = remember { PermissionManager(context) }
+                        var permUpdated by remember { mutableIntStateOf(0) }
+                        val permLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.RequestMultiplePermissions()
+                        ) {
+                            permUpdated++
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("System Permissions", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(
+                                    text = "Mic: ${if (permManager.hasAudioPermission()) "Granted" else "Needed"} • " +
+                                            "Contacts: ${if (permManager.hasContactsPermission()) "Granted" else "Needed"} • " +
+                                            "Notifs: ${if (permManager.hasNotificationPermission()) "Granted" else "Needed"}",
+                                    fontSize = 11.sp,
+                                    color = MayaTextSecondary
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    val missing = permManager.getMissingPermissions()
+                                    if (missing.isNotEmpty()) {
+                                        permLauncher.launch(missing)
+                                    } else {
+                                        Toast.makeText(context, "All permissions granted!", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            ) {
+                                Text("Grant", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 6. SHIZUKU INTEGRATION
             item {
                 SettingsCard(title = "Shizuku Integration (Optional)", icon = "⚡") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

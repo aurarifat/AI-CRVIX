@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -54,6 +57,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.ai.ProviderSelection
+import com.example.devicecontrol.ActionRegistry
+import com.example.devicecontrol.MayaAccessibilityService
+import com.example.devicecontrol.ParsedAction
+import com.example.devicecontrol.PermissionManager
 import com.example.ui.MainViewModel
 import com.example.ui.theme.MayaBorder
 import com.example.ui.theme.MayaTextPrimary
@@ -317,24 +324,119 @@ fun OnboardingDialog(
                     }
 
                     6 -> {
+                        val context = LocalContext.current
+                        val permManager = remember { PermissionManager(context) }
+                        var permUpdated by remember { mutableIntStateOf(0) }
+                        val permLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.RequestMultiplePermissions()
+                        ) {
+                            permUpdated++
+                        }
+
                         Text(
-                            text = "Optional Shizuku Setup",
+                            text = "Agentic Permissions & Automation",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Shizuku provides advanced privileged Android device control (e.g. system navigation). It is completely optional.",
+                            text = "Grant permissions so MayaX AI can talk naturally, send WhatsApp messages to contacts, and automate tasks.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MayaTextSecondary
                         )
                         Spacer(modifier = Modifier.height(14.dp))
-                        val status = viewModel.shizukuStatus.value
-                        Text(
-                            text = "Status: ${status.summary}",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (status.isRunning && status.isPermissionGranted) Color(0xFF2E7D32) else MayaTextSecondary
-                        )
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Microphone (Voice)", fontSize = 13.sp)
+                                Text(
+                                    text = if (permManager.hasAudioPermission()) "✓ Granted" else "Required",
+                                    fontSize = 12.sp,
+                                    color = if (permManager.hasAudioPermission()) Color(0xFF2E7D32) else MayaYellowDeep,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Contacts (WhatsApp/Calls)", fontSize = 13.sp)
+                                Text(
+                                    text = if (permManager.hasContactsPermission()) "✓ Granted" else "Required",
+                                    fontSize = 12.sp,
+                                    color = if (permManager.hasContactsPermission()) Color(0xFF2E7D32) else MayaYellowDeep,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Notifications", fontSize = 13.sp)
+                                Text(
+                                    text = if (permManager.hasNotificationPermission()) "✓ Granted" else "Recommended",
+                                    fontSize = 12.sp,
+                                    color = if (permManager.hasNotificationPermission()) Color(0xFF2E7D32) else MayaTextSecondary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = {
+                                val missing = permManager.getMissingPermissions()
+                                if (missing.isNotEmpty()) {
+                                    permLauncher.launch(missing)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MayaYellowPrimary,
+                                contentColor = MayaTextPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Grant All Permissions", fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        val isA11yRunning = MayaAccessibilityService.isRunning()
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isA11yRunning) "Auto-Send Service: Active" else "Auto-Send Service: Inactive",
+                                fontSize = 11.sp,
+                                color = if (isA11yRunning) Color(0xFF2E7D32) else MayaTextSecondary
+                            )
+                            if (!isA11yRunning) {
+                                TextButton(onClick = {
+                                    viewModel.executeDeviceAction(
+                                        ParsedAction(
+                                            intent = ActionRegistry.INTENT_OPEN_ACCESSIBILITY_SETTINGS,
+                                            target = "Accessibility"
+                                        )
+                                    )
+                                }) {
+                                    Text("Enable", fontSize = 11.sp)
+                                }
+                            }
+                        }
                     }
 
                     7 -> {

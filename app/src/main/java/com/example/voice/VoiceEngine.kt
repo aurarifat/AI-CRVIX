@@ -2,12 +2,14 @@ package com.example.voice
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,8 +25,9 @@ enum class VoiceState {
 
 data class VoiceSettings(
     val languageCode: String = "bn-BD", // "bn-BD", "en-US", "mixed"
-    val speechRate: Float = 1.0f,
-    val speechPitch: Float = 1.0f
+    val speechRate: Float = 1.04f,
+    val speechPitch: Float = 1.03f,
+    val voiceTone: String = "Natural Warm"
 )
 
 class VoiceEngine(
@@ -36,6 +39,7 @@ class VoiceEngine(
     private var speechRecognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var isTtsInitialized = false
+    private var currentActiveLocale: Locale? = null
 
     private val _voiceState = MutableStateFlow(VoiceState.IDLE)
     val voiceState: StateFlow<VoiceState> = _voiceState.asStateFlow()
@@ -75,6 +79,14 @@ class VoiceEngine(
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             isTtsInitialized = true
+
+            // Set speech-optimized AudioAttributes for natural, clear acoustics
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+            tts?.setAudioAttributes(audioAttributes)
+
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     _voiceState.value = VoiceState.SPEAKING
@@ -101,7 +113,7 @@ class VoiceEngine(
         tts?.setSpeechRate(settings.speechRate)
         tts?.setPitch(settings.speechPitch)
 
-        val locale = when (settings.languageCode) {
+        val targetLocale = when (settings.languageCode) {
             "bn-BD", "bn" -> Locale("bn", "BD")
             "bn-IN" -> Locale("bn", "IN")
             "en-US", "en" -> Locale.US
@@ -109,11 +121,49 @@ class VoiceEngine(
             else -> Locale.getDefault()
         }
 
+        switchLocaleAndSelectNaturalVoice(targetLocale)
+    }
+
+    private fun switchLocaleAndSelectNaturalVoice(locale: Locale) {
+        if (currentActiveLocale == locale) return
+
         val result = tts?.setLanguage(locale)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-            // Fallback to English if Bengali TTS data is missing on the specific Android device
             tts?.setLanguage(Locale.US)
+            currentActiveLocale = Locale.US
+        } else {
+            currentActiveLocale = locale
         }
+
+        // Score available voices and pick the most natural, neural voice
+        try {
+            val allVoices = tts?.voices
+            if (!allVoices.isNullOrEmpty()) {
+                val matchingVoices = allVoices.filter {
+                    it.locale.language.equals(currentActiveLocale?.language, ignoreCase = true)
+                }
+                if (matchingVoices.isNotEmpty()) {
+                    val bestNaturalVoice = matchingVoices.maxByOrNull { voice ->
+                        var score = 0
+                        if (voice.quality == Voice.QUALITY_VERY_HIGH) score += 60
+                        if (voice.quality == Voice.QUALITY_HIGH) score += 40
+                        if (voice.quality == Voice.QUALITY_NORMAL) score += 20
+                        if (voice.quality == Voice.QUALITY_LOW) score -= 40
+
+                        val name = voice.name.lowercase()
+                        if (name.contains("neural") || name.contains("natural")) score += 50
+                        if (name.contains("studio") || name.contains("premium")) score += 35
+                        if (name.contains("network") || voice.isNetworkConnectionRequired) score += 30
+                        if (name.contains("-x-")) score += 25 // Google WaveNet / Journey models
+                        if (!name.contains("robot") && !name.contains("legacy")) score += 10
+                        score
+                    }
+                    if (bestNaturalVoice != null) {
+                        tts?.voice = bestNaturalVoice
+                    }
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     fun startListening() {
@@ -177,17 +227,21 @@ class VoiceEngine(
         }
     }
 
+    fun previewVoice() {
+        val sample = when (settings.languageCode) {
+            "bn-BD", "bn", "bn-IN" -> "নমস্কার! আমি মায়াক্স। আমি স্বাভাবিক এবং বন্ধুভাবাপন্ন গলায় আপনার সাথে কথা বলতে পারি।"
+            else -> "Hello! I am MayaX AI. My voice is now natural, expressive, and conversational. How can I help you today?"
+        }
+        speak(sample)
+    }
+
     fun speak(text: String) {
         if (!isTtsInitialized || tts == null) {
             return
         }
 
-        // Clean out action tags or markdown symbols for audio output
-        val cleanText = text
-            .replace(Regex("""ACTION:\s*\{.+?\}""", RegexOption.DOT_MATCHES_ALL), "")
-            .replace(Regex("""```[\s\S]*?```"""), "Code snippet provided in chat.")
-            .replace(Regex("""[*_#`~]"""), "")
-            .trim()
+        // Clean and format text for human-like conversational delivery
+        val cleanText = NaturalSpeechFormatter.format(text)
 
         if (cleanText.isBlank()) {
             _voiceState.value = VoiceState.IDLE
@@ -197,14 +251,8 @@ class VoiceEngine(
 
         // Detect language heuristic for TTS voice switching
         val isBengali = cleanText.any { it in '\u0980'..'\u09FF' }
-        if (isBengali) {
-            val res = tts?.setLanguage(Locale("bn", "BD"))
-            if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
-                tts?.setLanguage(Locale.US)
-            }
-        } else {
-            tts?.setLanguage(Locale.US)
-        }
+        val targetLocale = if (isBengali) Locale("bn", "BD") else Locale.US
+        switchLocaleAndSelectNaturalVoice(targetLocale)
 
         _voiceState.value = VoiceState.SPEAKING
         _statusMessage.value = "Speaking..."

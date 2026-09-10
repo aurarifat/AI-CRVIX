@@ -398,6 +398,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _statusBanner.value = "Action cancelled by user."
     }
 
+    fun executeDeviceAction(action: ParsedAction) {
+        executeDeviceActionInternal(action)
+    }
+
     private fun executeDeviceActionInternal(action: ParsedAction) {
         viewModelScope.launch {
             val outcome = repository.actionExecutor.executeAction(action)

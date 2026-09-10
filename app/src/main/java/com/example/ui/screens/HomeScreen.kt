@@ -231,11 +231,11 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 val chips = listOf(
-                    "Study mode" to "📚",
+                    "Open WhatsApp and send message" to "💬",
                     "Open YouTube" to "▶️",
+                    "Study mode" to "📚",
                     "Battery info" to "🔋",
                     "Open Chrome" to "🌐",
-                    "Open Settings" to "⚙️",
                     "আজকের দিন কেমন?" to "✨"
                 )
 

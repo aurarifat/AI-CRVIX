@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 data class ParsedAction(
     val intent: String,
     val target: String,
+    val message: String = "",
     val rawJson: String = ""
 )
 

@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">MayaX AI</string>
+    <string name="accessibility_service_label">MayaX Agentic Assistant Service</string>
+    <string name="accessibility_service_description">Enables MayaX AI to perform agentic tasks, like auto-sending WhatsApp messages, navigating, and assisting with device actions on your behalf.</string>
 </resources>

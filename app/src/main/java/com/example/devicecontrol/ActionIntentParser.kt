@@ -31,9 +31,13 @@ object ActionIntentParser {
         return try {
             val json = JSONObject(jsonStr)
             val intent = json.optString("intent", "")
-            val target = json.optString("target", "")
+            var target = json.optString("target", "")
+            if (target.isBlank()) {
+                target = json.optString("recipient", json.optString("phone", json.optString("query", json.optString("app", ""))))
+            }
+            val message = json.optString("message", json.optString("text", json.optString("body", json.optString("content", ""))))
             if (intent.isNotBlank()) {
-                ParsedAction(intent = intent, target = target, rawJson = jsonStr)
+                ParsedAction(intent = intent, target = target, message = message, rawJson = jsonStr)
             } else {
                 null
             }

@@ -3,8 +3,10 @@ package com.example
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,17 +31,21 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.devicecontrol.PermissionManager
 import com.example.ui.AppTab
 import com.example.ui.MainViewModel
 import com.example.ui.components.ActionConfirmationDialog
@@ -65,6 +71,22 @@ class MainActivity : ComponentActivity() {
             val currentTab by viewModel.currentTab.collectAsState()
             val showOnboarding by viewModel.showOnboarding.collectAsState()
             val confirmationState by viewModel.confirmationState.collectAsState()
+
+            val context = LocalContext.current
+            val permissionManager = remember { PermissionManager(context) }
+            val permissionsLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestMultiplePermissions()
+            ) { _ ->
+                // Permissions updated by user
+            }
+
+            // Prompt user for required permissions immediately at app startup
+            LaunchedEffect(Unit) {
+                val missing = permissionManager.getMissingPermissions()
+                if (missing.isNotEmpty()) {
+                    permissionsLauncher.launch(missing)
+                }
+            }
 
             MayaXTheme(darkTheme = isDarkMode) {
                 // Back navigation handling
