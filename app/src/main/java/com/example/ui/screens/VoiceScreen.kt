@@ -27,6 +27,9 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.GraphicEq
+import com.example.ui.components.AudioWaveformVisualizer
+import com.example.ui.components.WaveformStyle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -90,6 +93,7 @@ fun VoiceScreen(
     val prefs = viewModel.repository.providerManager
     var selectedLang by remember { mutableStateOf(prefs.voiceLanguage) }
     var speechSpeed by remember { mutableFloatStateOf(prefs.speechRate) }
+    var waveformStyle by remember { mutableStateOf(WaveformStyle.DYNAMIC_BARS) }
 
     var hasMicPermission by remember {
         mutableStateOf(
@@ -125,6 +129,23 @@ fun VoiceScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            waveformStyle = when (waveformStyle) {
+                                WaveformStyle.DYNAMIC_BARS -> WaveformStyle.OSCILLOSCOPE_RIBBON
+                                WaveformStyle.OSCILLOSCOPE_RIBBON -> WaveformStyle.CIRCULAR_RADAR
+                                WaveformStyle.CIRCULAR_RADAR -> WaveformStyle.DYNAMIC_BARS
+                            }
+                        },
+                        modifier = Modifier.testTag("waveform_style_toggle_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GraphicEq,
+                            contentDescription = "Change Waveform Style",
+                            tint = MayaYellowDeep
+                        )
+                    }
+
                     if (voiceState == VoiceState.SPEAKING) {
                         // Interrupt AI Speech button
                         IconButton(
@@ -203,6 +224,26 @@ fun VoiceScreen(
                         )
                     )
                 }
+
+                // Agent Task / Execution Status Banner
+                val statusBanner by viewModel.statusBanner.collectAsState()
+                if (statusBanner != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        color = MayaYellowContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "⚡ ${statusBanner ?: ""}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MayaTextPrimary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
             }
 
             // Central Visualizer Area
@@ -268,10 +309,25 @@ fun VoiceScreen(
                     }
                 }
 
-                // Audio Waveform Bar Visualizer when listening
+                // Real-time Microphone Audio Waveform Animation during voice recording sessions
                 if (voiceState == VoiceState.LISTENING) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    AudioWaveformBars(rmsLevel = rmsLevel)
+                    Spacer(modifier = Modifier.height(18.dp))
+                    AudioWaveformVisualizer(
+                        rmsLevel = rmsLevel,
+                        isRecording = true,
+                        style = waveformStyle,
+                        height = 80.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else if (voiceState == VoiceState.SPEAKING) {
+                    Spacer(modifier = Modifier.height(18.dp))
+                    AudioWaveformVisualizer(
+                        rmsLevel = 0.4f,
+                        isRecording = false,
+                        style = waveformStyle,
+                        height = 68.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 

@@ -391,6 +391,20 @@ fun OnboardingDialog(
                                     fontWeight = FontWeight.Bold
                                 )
                             }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Display Over Apps (Agent)", fontSize = 13.sp)
+                                if (permManager.hasDisplayOverlayPermission()) {
+                                    Text("✓ Granted", fontSize = 12.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                                } else {
+                                    TextButton(onClick = { permManager.requestDisplayOverlayPermission() }) {
+                                        Text("Enable", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))

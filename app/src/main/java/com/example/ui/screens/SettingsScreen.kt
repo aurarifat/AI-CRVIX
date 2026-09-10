@@ -890,6 +890,47 @@ fun SettingsScreen(
                                 Text("Grant", fontSize = 12.sp)
                             }
                         }
+
+                        // Display / Overlay Permission Card
+                        val hasDisplayPermission = permManager.hasDisplayOverlayPermission()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (hasDisplayPermission) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant,
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (hasDisplayPermission) "Display Permission: GRANTED" else "Display Over Other Apps: NEEDED",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = if (hasDisplayPermission) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Allows MayaX AI to communicate with the phone and execute agent tasks on top of other applications.",
+                                    fontSize = 11.sp,
+                                    color = MayaTextSecondary
+                                )
+                            }
+                            if (!hasDisplayPermission) {
+                                Button(
+                                    onClick = {
+                                        permManager.requestDisplayOverlayPermission()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MayaYellowPrimary,
+                                        contentColor = MayaTextPrimary
+                                    )
+                                ) {
+                                    Text("Grant", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                     }
                 }
             }

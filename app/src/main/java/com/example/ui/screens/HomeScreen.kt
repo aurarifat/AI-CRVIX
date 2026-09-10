@@ -233,6 +233,7 @@ fun HomeScreen(
                 val chips = listOf(
                     "Open WhatsApp and send message" to "💬",
                     "Open YouTube" to "▶️",
+                    "Device status & battery" to "⚡",
                     "Study mode" to "📚",
                     "Battery info" to "🔋",
                     "Open Chrome" to "🌐",
