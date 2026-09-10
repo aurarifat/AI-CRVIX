@@ -1,0 +1,6 @@
+{
+  "name": "MayaX AI",
+  "description": "Android-first AI voice assistant with OmniRoute and OpenRouter, voice conversation, local memory, and safe device control.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
