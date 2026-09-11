@@ -16,6 +16,8 @@ import com.example.data.repository.AssistantRepository
 import com.example.devicecontrol.ActionRegistry
 import com.example.devicecontrol.InstalledAppItem
 import com.example.devicecontrol.ParsedAction
+import com.example.devicecontrol.PermissionManager
+import com.example.devicecontrol.ShizukuBridge
 import com.example.devicecontrol.ShizukuManager
 import com.example.devicecontrol.ShizukuStatus
 import com.example.devicecontrol.ValidationResult
@@ -46,7 +48,9 @@ data class ConfirmationDialogState(
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val repository = AssistantRepository(application)
+    val shizukuBridge = ShizukuBridge.getInstance(application)
     val shizukuManager = ShizukuManager(application)
+    val permissionManager = PermissionManager(application)
 
     // Current Navigation Tab
     private val _currentTab = MutableStateFlow(AppTab.HOME)
@@ -136,6 +140,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     init {
+        // Initialize Shizuku Bridge for system automation
+        shizukuBridge.initialize()
+
         // Sync voice settings
         syncVoiceSettings()
 
@@ -164,6 +171,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setInputText(text: String) {
         _inputText.value = text
+    }
+
+    // Voice-to-Text Input Dictation
+    private val _isDictating = MutableStateFlow(false)
+    val isDictating: StateFlow<Boolean> = _isDictating.asStateFlow()
+
+    private var preDictationText = ""
+
+    fun startDictation(
+        currentText: String = _inputText.value,
+        onTextUpdated: (String) -> Unit = { setInputText(it) }
+    ) {
+        if (!permissionManager.hasRecordAudioPermission()) {
+            _statusBanner.value = "Microphone permission is required for voice typing."
+            return
+        }
+        if (!permissionManager.isSpeechRecognitionAvailable()) {
+            _statusBanner.value = "Speech recognition service is not available on this device."
+            return
+        }
+
+        preDictationText = currentText
+        _isDictating.value = true
+        _statusBanner.value = "Listening... Speak now for voice-to-text"
+
+        voiceEngine.startDictation(
+            onPartial = { partial ->
+                val combined = if (preDictationText.isBlank()) partial else "$preDictationText $partial"
+                onTextUpdated(combined)
+            },
+            onComplete = { completed ->
+                val combined = if (preDictationText.isBlank()) completed else "$preDictationText $completed"
+                onTextUpdated(combined)
+                _isDictating.value = false
+                _statusBanner.value = "Voice input transcribed"
+            }
+        )
+    }
+
+    fun stopDictation() {
+        if (_isDictating.value) {
+            voiceEngine.stopDictation()
+            _isDictating.value = false
+            _statusBanner.value = null
+        }
+    }
+
+    fun toggleDictation(
+        currentText: String = _inputText.value,
+        onTextUpdated: (String) -> Unit = { setInputText(it) }
+    ) {
+        if (_isDictating.value) {
+            stopDictation()
+        } else {
+            startDictation(currentText, onTextUpdated)
+        }
     }
 
     fun selectConversation(id: Long) {
@@ -472,8 +535,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository.providerManager.darkMode = newMode
     }
 
+    fun requestShizukuPermission() {
+        shizukuBridge.requestPermission()
+        refreshShizukuStatus()
+    }
+
     override fun onCleared() {
         super.onCleared()
         voiceEngine.destroy()
+        shizukuBridge.destroy()
     }
 }

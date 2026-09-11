@@ -74,6 +74,20 @@ class PermissionManager(private val context: Context) {
         return context.checkCallingOrSelfPermission(ShizukuManager.SHIZUKU_PERMISSION) == PackageManager.PERMISSION_GRANTED
     }
 
+    /**
+     * Checks if speech recognition services (Google Speech Services / OEM recognition service)
+     * are available on the device for voice-to-text input.
+     */
+    fun isSpeechRecognitionAvailable(): Boolean {
+        return try {
+            android.speech.SpeechRecognizer.isRecognitionAvailable(context) ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                 android.speech.SpeechRecognizer.isOnDeviceRecognitionAvailable(context))
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun allCorePermissionsGranted(): Boolean {
         return hasRecordAudioPermission() && hasNotificationPermission() && hasContactsPermission()
     }

@@ -17,85 +17,40 @@ data class ShizukuStatus(
 class ShizukuManager(private val context: Context) {
 
     companion object {
-        const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
+        const val SHIZUKU_PACKAGE = ShizukuBridge.SHIZUKU_PACKAGE
         const val SHIZUKU_PERMISSION = "moe.shizuku.manager.permission.API_V23"
     }
 
+    val bridge: ShizukuBridge = ShizukuBridge.getInstance(context)
+
+    init {
+        bridge.initialize()
+    }
+
     fun getStatus(): ShizukuStatus {
-        val isInstalled = isShizukuInstalled()
-        if (!isInstalled) {
-            return ShizukuStatus(
-                isInstalled = false,
-                isRunning = false,
-                isPermissionGranted = false,
-                summary = "Shizuku is not installed"
-            )
-        }
-
-        // Check if Shizuku manager service provider or permission is available
-        val hasPermission = context.checkCallingOrSelfPermission(SHIZUKU_PERMISSION) == PackageManager.PERMISSION_GRANTED
-
-        // Check if Shizuku binder/service can be reached
-        val isRunning = checkShizukuRunning()
-
+        val bridgeStatus = bridge.refreshStatus()
         return ShizukuStatus(
-            isInstalled = true,
-            isRunning = isRunning,
-            isPermissionGranted = hasPermission,
-            version = if (isRunning) 13 else 0,
-            summary = when {
-                !isRunning -> "Installed but not running. Start it via Wireless Debugging."
-                !hasPermission -> "Running. Permission not yet granted."
-                else -> "Connected and authorized."
-            }
+            isInstalled = bridgeStatus.isInstalled,
+            isRunning = bridgeStatus.isRunning,
+            isPermissionGranted = bridgeStatus.isPermissionGranted,
+            version = bridgeStatus.version,
+            summary = bridgeStatus.summary
         )
     }
 
-    private fun isShizukuInstalled(): Boolean {
-        return try {
-            context.packageManager.getPackageInfo(SHIZUKU_PACKAGE, 0)
-            true
-        } catch (_: PackageManager.NameNotFoundException) {
-            false
-        }
-    }
-
-    private fun checkShizukuRunning(): Boolean {
-        return try {
-            // Check if provider exists and responds
-            val uri = Uri.parse("content://moe.shizuku.privileged.api.provider")
-            val cursor = context.contentResolver.query(uri, null, null, null, null)
-            val available = cursor != null
-            cursor?.close()
-            available
-        } catch (_: Exception) {
-            // Alternatively check package info flag
-            false
-        }
+    fun requestPermission(): Boolean {
+        return bridge.requestPermission()
     }
 
     fun openShizukuApp(): Boolean {
-        val intent = context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
-        return if (intent != null) {
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-            true
-        } else {
-            false
-        }
+        return bridge.openShizukuApp()
+    }
+
+    fun openWirelessDebugging(): Boolean {
+        return bridge.openWirelessDebuggingSettings()
     }
 
     fun openPlayStoreForShizuku() {
-        try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$SHIZUKU_PACKAGE")).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-        } catch (_: Exception) {
-            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$SHIZUKU_PACKAGE")).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(webIntent)
-        }
+        bridge.openPlayStoreForShizuku()
     }
 }

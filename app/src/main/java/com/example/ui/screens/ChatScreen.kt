@@ -42,6 +42,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -49,6 +52,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import com.example.devicecontrol.PermissionManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -89,8 +93,20 @@ fun ChatScreen(
     val inputText by viewModel.inputText.collectAsState()
     val isGenerating by viewModel.isGenerating.collectAsState()
     val statusBanner by viewModel.statusBanner.collectAsState()
+    val isDictating by viewModel.isDictating.collectAsState()
     val conversations by viewModel.conversations.collectAsState()
     val activeConvId by viewModel.activeConversationId.collectAsState()
+
+    val permManager = remember { PermissionManager(context) }
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.startDictation()
+        } else {
+            Toast.makeText(context, "Microphone permission required for voice-to-text typing", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val listState = rememberLazyListState()
     var showHistoryDropdown by remember { mutableStateOf(false) }
@@ -311,15 +327,39 @@ fun ChatScreen(
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { viewModel.setInputText(it) },
-                        placeholder = { Text("Message MayaX AI...") },
+                        placeholder = {
+                            Text(if (isDictating) "Listening... speak now" else "Message MayaX AI...")
+                        },
                         modifier = Modifier
                             .weight(1f)
                             .testTag("chat_input_field"),
                         shape = RoundedCornerShape(24.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MayaYellowPrimary,
-                            unfocusedBorderColor = MayaBorder
+                            focusedBorderColor = if (isDictating) Color(0xFFD32F2F) else MayaYellowPrimary,
+                            unfocusedBorderColor = if (isDictating) Color(0xFFD32F2F) else MayaBorder
                         ),
+                        trailingIcon = {
+                            IconButton(
+                                onClick = {
+                                    if (isDictating) {
+                                        viewModel.stopDictation()
+                                    } else {
+                                        if (permManager.hasRecordAudioPermission()) {
+                                            viewModel.startDictation()
+                                        } else {
+                                            audioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.testTag("chat_dictate_button")
+                            ) {
+                                Icon(
+                                    imageVector = if (isDictating) Icons.Default.MicOff else Icons.Default.Mic,
+                                    contentDescription = if (isDictating) "Stop Voice Typing" else "Speech to Text Input",
+                                    tint = if (isDictating) Color(0xFFD32F2F) else MayaYellowDeep
+                                )
+                            }
+                        },
                         maxLines = 4
                     )
 

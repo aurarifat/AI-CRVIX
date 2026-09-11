@@ -27,6 +27,9 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import com.example.devicecontrol.PermissionManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -76,6 +80,19 @@ fun HomeScreen(
     val rmsLevel by viewModel.voiceEngine.rmsLevel.collectAsState()
     val statusMsg by viewModel.voiceEngine.statusMessage.collectAsState()
     val statusBanner by viewModel.statusBanner.collectAsState()
+    val isDictating by viewModel.isDictating.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val permManager = remember { PermissionManager(context) }
+
+    var quickInput by remember { mutableStateOf("") }
+
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.startDictation(currentText = quickInput) { quickInput = it }
+        }
+    }
 
     val currentHour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
     val greeting = when (currentHour) {
@@ -84,8 +101,6 @@ fun HomeScreen(
         in 17..21 -> "Good evening 👋"
         else -> "Good night 🌙"
     }
-
-    var quickInput by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -282,20 +297,35 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
-                    onClick = onNavigateToVoice,
+                    onClick = {
+                        if (isDictating) {
+                            viewModel.stopDictation()
+                        } else {
+                            if (permManager.hasRecordAudioPermission()) {
+                                viewModel.startDictation(currentText = quickInput) { quickInput = it }
+                            } else {
+                                audioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                            }
+                        }
+                    },
                     modifier = Modifier.testTag("home_mic_button")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = "Voice Mode",
-                        tint = MayaYellowDeep
+                        imageVector = if (isDictating) Icons.Default.MicOff else Icons.Default.Mic,
+                        contentDescription = if (isDictating) "Stop Voice Typing" else "Voice Dictation",
+                        tint = if (isDictating) androidx.compose.ui.graphics.Color(0xFFD32F2F) else MayaYellowDeep
                     )
                 }
 
                 OutlinedTextField(
                     value = quickInput,
                     onValueChange = { quickInput = it },
-                    placeholder = { Text("Ask MayaX AI anything...", fontSize = 14.sp) },
+                    placeholder = {
+                        Text(
+                            text = if (isDictating) "Listening... speak now" else "Ask MayaX AI anything...",
+                            fontSize = 14.sp
+                        )
+                    },
                     modifier = Modifier
                         .weight(1f)
                         .testTag("home_quick_input"),

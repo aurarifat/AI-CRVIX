@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -987,20 +988,44 @@ fun SettingsScreen(
                             ) {
                                 Text("Refresh", fontSize = 11.sp)
                             }
-                            Button(
-                                onClick = {
-                                    val opened = viewModel.shizukuManager.openShizukuApp()
-                                    if (!opened) {
-                                        viewModel.shizukuManager.openPlayStoreForShizuku()
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MayaYellowPrimary,
-                                    contentColor = MayaTextPrimary
-                                ),
-                                modifier = Modifier.weight(1.5f)
+                            if (shizukuStatus.isRunning && !shizukuStatus.isPermissionGranted) {
+                                Button(
+                                    onClick = { viewModel.requestShizukuPermission() },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MayaYellowPrimary,
+                                        contentColor = MayaTextPrimary
+                                    ),
+                                    modifier = Modifier.weight(1.5f)
+                                ) {
+                                    Text("Authorize", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        val opened = viewModel.shizukuManager.openShizukuApp()
+                                        if (!opened) {
+                                            viewModel.shizukuManager.openPlayStoreForShizuku()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MayaYellowPrimary,
+                                        contentColor = MayaTextPrimary
+                                    ),
+                                    modifier = Modifier.weight(1.5f)
+                                ) {
+                                    Text(if (shizukuStatus.isInstalled) "Open App" else "Get Shizuku", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        if (!shizukuStatus.isRunning) {
+                            OutlinedButton(
+                                onClick = { viewModel.shizukuBridge.openWirelessDebuggingSettings() },
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(if (shizukuStatus.isInstalled) "Open Shizuku" else "Get Shizuku", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Developer Options & Wireless Debugging", fontSize = 11.sp)
                             }
                         }
                     }

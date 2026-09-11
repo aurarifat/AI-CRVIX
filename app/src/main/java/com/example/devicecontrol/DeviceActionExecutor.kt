@@ -461,32 +461,33 @@ class DeviceActionExecutor(
         return ExecutionOutcome(true, "Opened Accessibility Settings. Enable 'MayaX Agentic Assistant Service' for full automation.", "Successful")
     }
 
-    private fun simulateBack(): ExecutionOutcome {
+    private suspend fun simulateBack(): ExecutionOutcome {
         val accessibility = MayaAccessibilityService.instance
         if (accessibility != null) {
             val success = accessibility.performBack()
             return ExecutionOutcome(success, if (success) "Navigated Back" else "Could not perform Back", if (success) "Successful" else "Error")
         }
-        val shizuku = ShizukuManager(context)
-        val status = shizuku.getStatus()
+        val bridge = ShizukuBridge.getInstance(context)
+        val status = bridge.status.value
         return if (status.isRunning && status.isPermissionGranted) {
-            // Simulated back using Shizuku privileged access
-            ExecutionOutcome(true, "Navigated Back via Shizuku", "Successful")
+            val result = bridge.inputBack()
+            ExecutionOutcome(result.isSuccess, if (result.isSuccess) "Navigated Back via Shizuku" else "Shizuku Back failed: ${result.stderr}", if (result.isSuccess) "Successful" else "Error")
         } else {
             ExecutionOutcome(false, "Enable MayaX Accessibility Service or connect Shizuku for automated navigation", "Blocked", "Service not connected")
         }
     }
 
-    private fun simulateRecents(): ExecutionOutcome {
+    private suspend fun simulateRecents(): ExecutionOutcome {
         val accessibility = MayaAccessibilityService.instance
         if (accessibility != null) {
             val success = accessibility.performRecents()
             return ExecutionOutcome(success, if (success) "Opened Recent Apps" else "Could not open Recents", if (success) "Successful" else "Error")
         }
-        val shizuku = ShizukuManager(context)
-        val status = shizuku.getStatus()
+        val bridge = ShizukuBridge.getInstance(context)
+        val status = bridge.status.value
         return if (status.isRunning && status.isPermissionGranted) {
-            ExecutionOutcome(true, "Opened Recent Apps via Shizuku", "Successful")
+            val result = bridge.inputRecents()
+            ExecutionOutcome(result.isSuccess, if (result.isSuccess) "Opened Recent Apps via Shizuku" else "Shizuku Recents failed: ${result.stderr}", if (result.isSuccess) "Successful" else "Error")
         } else {
             ExecutionOutcome(false, "Enable MayaX Accessibility Service or connect Shizuku for recent apps", "Blocked", "Service not connected")
         }

@@ -53,6 +53,12 @@ class VoiceEngine(
     private val _statusMessage = MutableStateFlow("Tap to talk")
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
 
+    // Voice-to-text dictation hooks
+    var isDictationMode = false
+        private set
+    var onDictationPartialResult: ((String) -> Unit)? = null
+    var onDictationCompleted: ((String) -> Unit)? = null
+
     var settings = VoiceSettings()
         set(value) {
             field = value
@@ -64,11 +70,35 @@ class VoiceEngine(
         initTts()
     }
 
+    fun isRecognitionAvailable(): Boolean {
+        return try {
+            SpeechRecognizer.isRecognitionAvailable(context) ||
+                (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+                 SpeechRecognizer.isOnDeviceRecognitionAvailable(context))
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun initSpeechRecognizer() {
-        if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+        try {
+            speechRecognizer?.destroy()
+            speechRecognizer = when {
+                SpeechRecognizer.isRecognitionAvailable(context) -> {
+                    SpeechRecognizer.createSpeechRecognizer(context)
+                }
+                android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+                SpeechRecognizer.isOnDeviceRecognitionAvailable(context) -> {
+                    SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+                }
+                else -> {
+                    SpeechRecognizer.createSpeechRecognizer(context)
+                }
+            }?.apply {
                 setRecognitionListener(this@VoiceEngine)
             }
+        } catch (_: Exception) {
+            speechRecognizer = null
         }
     }
 
@@ -166,6 +196,23 @@ class VoiceEngine(
         } catch (_: Exception) {}
     }
 
+    fun startDictation(
+        onPartial: (String) -> Unit,
+        onComplete: (String) -> Unit
+    ) {
+        isDictationMode = true
+        onDictationPartialResult = onPartial
+        onDictationCompleted = onComplete
+        startListening()
+    }
+
+    fun stopDictation() {
+        if (isDictationMode) {
+            isDictationMode = false
+            stopListening()
+        }
+    }
+
     fun startListening() {
         // Interrupt TTS if speaking
         interrupt()
@@ -177,7 +224,8 @@ class VoiceEngine(
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
 
             val langTag = when (settings.languageCode) {
                 "bn-BD", "bn" -> "bn-BD"
@@ -305,6 +353,10 @@ class VoiceEngine(
             SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network error for recognition"
             else -> "Speech recognition paused"
         }
+        if (isDictationMode) {
+            isDictationMode = false
+            onErrorOccurred(msg)
+        }
         _voiceState.value = VoiceState.IDLE
         _statusMessage.value = msg
     }
@@ -312,6 +364,16 @@ class VoiceEngine(
     override fun onResults(results: Bundle?) {
         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
         val text = matches?.firstOrNull() ?: ""
+        if (isDictationMode) {
+            isDictationMode = false
+            _voiceState.value = VoiceState.IDLE
+            _statusMessage.value = "Tap to talk"
+            if (text.isNotBlank()) {
+                _transcription.value = text
+                onDictationCompleted?.invoke(text)
+            }
+            return
+        }
         if (text.isNotBlank()) {
             _transcription.value = text
             _voiceState.value = VoiceState.THINKING
@@ -328,6 +390,9 @@ class VoiceEngine(
         val text = matches?.firstOrNull() ?: ""
         if (text.isNotBlank()) {
             _transcription.value = text
+            if (isDictationMode) {
+                onDictationPartialResult?.invoke(text)
+            }
         }
     }
 
