@@ -61,6 +61,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -141,6 +142,20 @@ fun SettingsScreen(
 
     var showAppPicker by remember { mutableStateOf(false) }
     var showAddCommandDialog by remember { mutableStateOf(false) }
+
+    // Automatically refresh Shizuku status when returning to Settings
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshShizukuStatus()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -945,6 +960,7 @@ fun SettingsScreen(
                                 .fillMaxWidth()
                                 .background(
                                     if (shizukuStatus.isRunning && shizukuStatus.isPermissionGranted) Color(0xFFE8F5E9)
+                                    else if (shizukuStatus.isRunning) Color(0xFFFFF8E1)
                                     else MaterialTheme.colorScheme.surfaceVariant,
                                     RoundedCornerShape(12.dp)
                                 )
@@ -954,25 +970,32 @@ fun SettingsScreen(
                             Icon(
                                 imageVector = Icons.Default.Security,
                                 contentDescription = "Shizuku",
-                                tint = if (shizukuStatus.isRunning && shizukuStatus.isPermissionGranted) Color(0xFF2E7D32) else MayaYellowDeep
+                                tint = if (shizukuStatus.isRunning && shizukuStatus.isPermissionGranted) Color(0xFF2E7D32)
+                                else if (shizukuStatus.isRunning) MayaYellowDeep
+                                else MayaTextSecondary
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = if (shizukuStatus.isRunning) "Shizuku: Running (v${shizukuStatus.version})" else "Shizuku: Not Connected",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp
                                 )
                                 Text(
-                                    text = if (shizukuStatus.isPermissionGranted) "Permission: Granted" else "Permission: Not Granted",
+                                    text = when {
+                                        shizukuStatus.isRunning && shizukuStatus.isPermissionGranted -> "Permission: Granted (System Automation Active)"
+                                        shizukuStatus.isRunning -> "Permission: Not Granted (Tap Authorize or check Shizuku app)"
+                                        shizukuStatus.isInstalled -> "Service is stopped. Start via Wireless Debugging in Shizuku."
+                                        else -> "Shizuku is not installed on this device."
+                                    },
                                     fontSize = 11.sp,
-                                    color = MayaTextSecondary
+                                    color = if (shizukuStatus.isRunning && shizukuStatus.isPermissionGranted) Color(0xFF2E7D32) else MayaTextSecondary
                                 )
                             }
                         }
 
                         Text(
-                            text = "Setup Guide:\n1. Install Shizuku from Play Store or GitHub\n2. Start Shizuku service via Wireless Debugging\n3. Authorize MayaX AI in Shizuku Manager\n4. Tap 'Refresh Status' below",
+                            text = "Quick Setup:\n1. Start Shizuku service in Shizuku app (via Wireless Debugging or Root)\n2. Ensure 'MayaX AI' is switched ON in Shizuku > Authorized Applications\n3. Tap 'Refresh Status' below",
                             fontSize = 11.sp,
                             color = MayaTextSecondary,
                             lineHeight = 16.sp
@@ -986,6 +1009,8 @@ fun SettingsScreen(
                                 onClick = { viewModel.refreshShizukuStatus() },
                                 modifier = Modifier.weight(1f)
                             ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text("Refresh", fontSize = 11.sp)
                             }
                             if (shizukuStatus.isRunning && !shizukuStatus.isPermissionGranted) {
@@ -1013,7 +1038,7 @@ fun SettingsScreen(
                                     ),
                                     modifier = Modifier.weight(1.5f)
                                 ) {
-                                    Text(if (shizukuStatus.isInstalled) "Open App" else "Get Shizuku", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(if (shizukuStatus.isInstalled) "Open Shizuku" else "Get Shizuku", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }

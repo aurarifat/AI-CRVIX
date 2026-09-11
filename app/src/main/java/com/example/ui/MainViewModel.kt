@@ -163,6 +163,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+
+        // Reactively sync Shizuku Bridge status into _shizukuStatus StateFlow
+        viewModelScope.launch {
+            shizukuBridge.status.collect { bridgeStatus ->
+                _shizukuStatus.value = ShizukuStatus(
+                    isInstalled = bridgeStatus.isInstalled,
+                    isRunning = bridgeStatus.isRunning,
+                    isPermissionGranted = bridgeStatus.isPermissionGranted,
+                    version = bridgeStatus.version,
+                    summary = bridgeStatus.summary
+                )
+            }
+        }
     }
 
     fun selectTab(tab: AppTab) {
@@ -277,7 +290,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshShizukuStatus() {
-        _shizukuStatus.value = shizukuManager.getStatus()
+        val bridgeStatus = shizukuBridge.refreshStatus()
+        _shizukuStatus.value = ShizukuStatus(
+            isInstalled = bridgeStatus.isInstalled,
+            isRunning = bridgeStatus.isRunning,
+            isPermissionGranted = bridgeStatus.isPermissionGranted,
+            version = bridgeStatus.version,
+            summary = bridgeStatus.summary
+        )
     }
 
     fun refreshModels() {

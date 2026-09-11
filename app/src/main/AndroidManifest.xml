@@ -65,6 +65,19 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
+
+        <!-- Shizuku Provider declaration required for IPC binder connection -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <meta-data
+            android:name="moe.shizuku.client.V3_SUPPORT"
+            android:value="true" />
     </application>
 
 </manifest>
