@@ -161,6 +161,42 @@ class ShizukuBridge(private val context: Context) {
      * Re-evaluates connection and permission states.
      */
     fun refreshStatus(): ShizukuBridgeStatus {
+        val isAlive = try {
+            Shizuku.pingBinder()
+        } catch (_: Throwable) {
+            false
+        }
+
+        if (isAlive) {
+            val hasPermission = checkPermission()
+            val version = try { Shizuku.getVersion() } catch (_: Throwable) { 0 }
+            val uid = try { Shizuku.getUid() } catch (_: Throwable) { -1 }
+
+            val state = if (hasPermission) {
+                ShizukuConnectionState.CONNECTED_AUTHORIZED
+            } else {
+                ShizukuConnectionState.CONNECTED_UNAUTHORIZED
+            }
+
+            val summary = if (hasPermission) {
+                "Connected & Authorized (v$version, UID $uid). Privileged system automation active."
+            } else {
+                "Connected to Shizuku service (v$version). Permission required — tap Authorize or enable MayaX AI in Shizuku."
+            }
+
+            val newStatus = ShizukuBridgeStatus(
+                state = state,
+                isInstalled = true,
+                isRunning = true,
+                isPermissionGranted = hasPermission,
+                version = version,
+                uid = uid,
+                summary = summary
+            )
+            _status.value = newStatus
+            return newStatus
+        }
+
         val installed = isShizukuInstalled()
         if (!installed) {
             val newStatus = ShizukuBridgeStatus(
@@ -174,63 +210,64 @@ class ShizukuBridge(private val context: Context) {
             return newStatus
         }
 
-        val isAlive = try {
-            Shizuku.pingBinder()
-        } catch (_: Throwable) {
-            false
-        }
-
-        if (!isAlive) {
-            val newStatus = ShizukuBridgeStatus(
-                state = ShizukuConnectionState.SERVICE_STOPPED,
-                isInstalled = true,
-                isRunning = false,
-                isPermissionGranted = false,
-                summary = "Shizuku installed but service is not running. Start it via Wireless Debugging."
-            )
-            _status.value = newStatus
-            return newStatus
-        }
-
-        val hasPermission = checkPermission()
-        val version = try { Shizuku.getVersion() } catch (_: Throwable) { 0 }
-        val uid = try { Shizuku.getUid() } catch (_: Throwable) { -1 }
-
-        val state = if (hasPermission) {
-            ShizukuConnectionState.CONNECTED_AUTHORIZED
-        } else {
-            ShizukuConnectionState.CONNECTED_UNAUTHORIZED
-        }
-
-        val summary = if (hasPermission) {
-            "Connected & Authorized (v$version, UID $uid). System automation active."
-        } else {
-            "Connected (v$version). Permission required for privileged automation."
-        }
-
         val newStatus = ShizukuBridgeStatus(
-            state = state,
+            state = ShizukuConnectionState.SERVICE_STOPPED,
             isInstalled = true,
-            isRunning = true,
-            isPermissionGranted = hasPermission,
-            version = version,
-            uid = uid,
-            summary = summary
+            isRunning = false,
+            isPermissionGranted = false,
+            summary = "Shizuku is installed, but service is not running. Start it in Shizuku app (via Wireless Debugging or Root)."
         )
         _status.value = newStatus
         return newStatus
     }
 
     /**
+     * Forces re-registration of Shizuku listeners and re-pings the binder.
+     */
+    fun forceReconnect(): ShizukuBridgeStatus {
+        try {
+            try {
+                Shizuku.removeBinderReceivedListener(binderReceivedListener)
+                Shizuku.removeBinderDeadListener(binderDeadListener)
+                Shizuku.removeRequestPermissionResultListener(permissionResultListener)
+            } catch (_: Throwable) {}
+
+            Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
+            Shizuku.addBinderDeadListener(binderDeadListener)
+            Shizuku.addRequestPermissionResultListener(permissionResultListener)
+            isInitialized = true
+            appendLog("Reconnected Shizuku listeners")
+        } catch (e: Throwable) {
+            Log.w(TAG, "forceReconnect error", e)
+            appendLog("Reconnect error: ${e.message}")
+        }
+        return refreshStatus()
+    }
+
+    /**
      * Checks if Shizuku application is installed.
      */
     fun isShizukuInstalled(): Boolean {
-        return try {
-            context.packageManager.getPackageInfo(SHIZUKU_PACKAGE, 0)
-            true
-        } catch (_: PackageManager.NameNotFoundException) {
-            false
+        try {
+            if (Shizuku.pingBinder()) return true
+        } catch (_: Throwable) {}
+
+        val knownPackages = listOf(
+            SHIZUKU_PACKAGE,
+            "moe.shizuku.privileged.api.debug",
+            "rikka.sui"
+        )
+        val pm = context.packageManager
+        for (pkg in knownPackages) {
+            try {
+                pm.getPackageInfo(pkg, 0)
+                return true
+            } catch (_: Throwable) {}
+            if (pm.getLaunchIntentForPackage(pkg) != null) {
+                return true
+            }
         }
+        return false
     }
 
     /**
@@ -239,11 +276,13 @@ class ShizukuBridge(private val context: Context) {
     fun checkPermission(): Boolean {
         return try {
             if (!Shizuku.pingBinder()) return false
-            if (Shizuku.isPreV11()) {
-                context.checkCallingOrSelfPermission(ShizukuManager.SHIZUKU_PERMISSION) == PackageManager.PERMISSION_GRANTED
-            } else {
-                Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+            val grantedViaSdk = try {
+                if (Shizuku.isPreV11()) false else (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED)
+            } catch (_: Throwable) {
+                false
             }
+            val grantedViaSystem = (context.checkCallingOrSelfPermission(ShizukuManager.SHIZUKU_PERMISSION) == PackageManager.PERMISSION_GRANTED)
+            grantedViaSdk || grantedViaSystem
         } catch (_: Throwable) {
             false
         }
@@ -256,6 +295,7 @@ class ShizukuBridge(private val context: Context) {
         return try {
             if (!Shizuku.pingBinder()) {
                 appendLog("Cannot request permission: Shizuku service is not running")
+                openShizukuApp()
                 return false
             }
             if (checkPermission()) {
@@ -274,6 +314,7 @@ class ShizukuBridge(private val context: Context) {
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to request Shizuku permission", e)
             appendLog("Request permission error: ${e.message}")
+            openShizukuApp()
             false
         }
     }
@@ -282,14 +323,21 @@ class ShizukuBridge(private val context: Context) {
      * Launches the Shizuku Manager application.
      */
     fun openShizukuApp(): Boolean {
-        val intent = context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
-        return if (intent != null) {
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-            true
-        } else {
-            false
+        val knownPackages = listOf(
+            SHIZUKU_PACKAGE,
+            "moe.shizuku.privileged.api.debug",
+            "rikka.sui"
+        )
+        val pm = context.packageManager
+        for (pkg in knownPackages) {
+            val intent = pm.getLaunchIntentForPackage(pkg)
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                return true
+            }
         }
+        return false
     }
 
     /**

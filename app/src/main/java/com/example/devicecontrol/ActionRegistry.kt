@@ -34,19 +34,19 @@ object ActionRegistry {
         INTENT_SEND_WHATSAPP to RegisteredAction(
             intent = INTENT_SEND_WHATSAPP,
             description = "Send a WhatsApp message or open chat with pre-filled message",
-            requiresConfirmation = false,
+            requiresConfirmation = true,
             requiresShizuku = false
         ),
         INTENT_SEND_SMS to RegisteredAction(
             intent = INTENT_SEND_SMS,
             description = "Send or compose an SMS message to a contact",
-            requiresConfirmation = false,
+            requiresConfirmation = true,
             requiresShizuku = false
         ),
         INTENT_CALL_PHONE to RegisteredAction(
             intent = INTENT_CALL_PHONE,
             description = "Dial a contact or phone number",
-            requiresConfirmation = false,
+            requiresConfirmation = true,
             requiresShizuku = false
         ),
         INTENT_SEARCH_WEB to RegisteredAction(
@@ -58,19 +58,19 @@ object ActionRegistry {
         INTENT_OPEN_URL to RegisteredAction(
             intent = INTENT_OPEN_URL,
             description = "Open a website URL",
-            requiresConfirmation = false,
+            requiresConfirmation = true,
             requiresShizuku = false
         ),
         INTENT_PLAY_YOUTUBE to RegisteredAction(
             intent = INTENT_PLAY_YOUTUBE,
             description = "Search and play YouTube video",
-            requiresConfirmation = false,
+            requiresConfirmation = true,
             requiresShizuku = false
         ),
         INTENT_OPEN_ACCESSIBILITY_SETTINGS to RegisteredAction(
             intent = INTENT_OPEN_ACCESSIBILITY_SETTINGS,
             description = "Open Android Accessibility Settings for agentic automation",
-            requiresConfirmation = false,
+            requiresConfirmation = true,
             requiresShizuku = false
         ),
         INTENT_OPEN_APP to RegisteredAction(
@@ -82,25 +82,25 @@ object ActionRegistry {
         INTENT_OPEN_YOUTUBE to RegisteredAction(
             intent = INTENT_OPEN_YOUTUBE,
             description = "Open YouTube video app or website",
-            requiresConfirmation = false,
+            requiresConfirmation = true,
             requiresShizuku = false
         ),
         INTENT_OPEN_CHROME to RegisteredAction(
             intent = INTENT_OPEN_CHROME,
             description = "Open Chrome web browser",
-            requiresConfirmation = false,
+            requiresConfirmation = true,
             requiresShizuku = false
         ),
         INTENT_OPEN_CALCULATOR to RegisteredAction(
             intent = INTENT_OPEN_CALCULATOR,
             description = "Open device Calculator",
-            requiresConfirmation = false,
+            requiresConfirmation = true,
             requiresShizuku = false
         ),
         INTENT_OPEN_SETTINGS to RegisteredAction(
             intent = INTENT_OPEN_SETTINGS,
             description = "Open Android Settings page",
-            requiresConfirmation = false,
+            requiresConfirmation = true,
             requiresShizuku = false,
             allowedTargets = listOf("Settings", "WIFI", "BLUETOOTH", "BATTERY", "DISPLAY", "SOUND", "APPS", "DATE")
         ),

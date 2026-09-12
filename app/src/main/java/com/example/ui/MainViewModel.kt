@@ -450,14 +450,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val actionKey = "${action.intent}:${action.target}"
 
         // Check if always allowed
-        if (!regAction.requiresConfirmation || repository.providerManager.alwaysAllowActions.contains(actionKey)) {
+        val isAlwaysAllowed = repository.providerManager.alwaysAllowActions.contains(actionKey) ||
+                repository.providerManager.alwaysAllowActions.contains("${action.intent}:*") ||
+                (action.target.isBlank() && repository.providerManager.alwaysAllowActions.contains(action.intent)) ||
+                (action.target.isNotBlank() && repository.providerManager.alwaysAllowActions.contains("${action.intent}:${action.target.lowercase()}"))
+
+        if (!regAction.requiresConfirmation || isAlwaysAllowed) {
             executeDeviceActionInternal(action)
         } else {
-            // Require user confirmation
+            // Require user confirmation (Allow Once / Always Allow)
+            val friendlyTarget = action.target.ifBlank { action.intent }
             _confirmationState.value = ConfirmationDialogState(
                 isVisible = true,
                 action = action,
-                message = "Allow MayaX AI to perform '${action.intent}' on '${action.target}'?"
+                message = "Allow MayaX AI to open '$friendlyTarget'?"
             )
         }
     }
@@ -468,7 +474,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (action != null) {
             if (allowAlways) {
                 val currentSet = repository.providerManager.alwaysAllowActions.toMutableSet()
-                currentSet.add("${action.intent}:${action.target}")
+                val key = if (action.target.isNotBlank()) "${action.intent}:${action.target}" else action.intent
+                currentSet.add(key)
+                if (action.target.isNotBlank()) {
+                    currentSet.add("${action.intent}:${action.target.lowercase()}")
+                }
                 repository.providerManager.alwaysAllowActions = currentSet
             }
             executeDeviceActionInternal(action)
@@ -482,7 +492,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun executeDeviceAction(action: ParsedAction) {
-        executeDeviceActionInternal(action)
+        processDeviceAction(action)
     }
 
     private fun executeDeviceActionInternal(action: ParsedAction) {
@@ -496,7 +506,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun launchInstalledApp(app: InstalledAppItem) {
-        executeDeviceActionInternal(ParsedAction(ActionRegistry.INTENT_OPEN_APP, app.packageName))
+        processDeviceAction(ParsedAction(ActionRegistry.INTENT_OPEN_APP, app.appName))
     }
 
     // Memory operations
@@ -556,8 +566,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun requestShizukuPermission() {
-        shizukuBridge.requestPermission()
-        refreshShizukuStatus()
+        val success = shizukuBridge.requestPermission()
+        if (!success) {
+            _statusBanner.value = "Shizuku service not responding or permission request redirected."
+        }
+        refreshShizukuStatus(force = true)
+    }
+
+    fun refreshShizukuStatus(force: Boolean = true) {
+        viewModelScope.launch {
+            if (force) {
+                shizukuBridge.forceReconnect()
+            }
+            val status = shizukuBridge.refreshStatus()
+            _statusBanner.value = status.summary
+        }
+    }
+
+    fun testShizukuShell() {
+        viewModelScope.launch {
+            _statusBanner.value = "Testing Shizuku privileged shell..."
+            val result = shizukuBridge.executeCommand("whoami; getprop ro.build.version.release")
+            if (result.isSuccess) {
+                _statusBanner.value = "Shizuku Shell Success! Output: ${result.stdout.trim().replace("\n", " | ")}"
+            } else {
+                _statusBanner.value = "Shizuku Shell Failed: ${result.stderr.ifBlank { "Exit code ${result.exitCode}" }}"
+            }
+        }
     }
 
     override fun onCleared() {

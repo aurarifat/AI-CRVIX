@@ -6,7 +6,7 @@ object ActionIntentParser {
 
     private val ACTION_REGEX = Regex("""ACTION:\s*(\{.+?\})""", RegexOption.DOT_MATCHES_ALL)
 
-    fun parse(text: String): ParsedAction? {
+    fun parse(text: String, userPrompt: String = ""): ParsedAction? {
         // Look for ACTION:{...} pattern
         val match = ACTION_REGEX.find(text)
         if (match != null) {
@@ -21,6 +21,28 @@ object ActionIntentParser {
             if (endIdx != -1) {
                 val jsonStr = text.substring(startIdx, endIdx + 1)
                 return parseJson(jsonStr)
+            }
+        }
+
+        // Natural fallback from user prompt or assistant confirmation if user asks to open an app
+        val candidate = userPrompt.trim().ifBlank { text.trim() }
+        if (candidate.isNotBlank()) {
+            val lower = candidate.lowercase()
+            val prefixes = listOf("open app ", "launch app ", "open ", "launch ", "start ")
+            for (p in prefixes) {
+                if (lower.startsWith(p)) {
+                    val appName = candidate.substring(p.length).trim().removeSuffix(".").removeSuffix("!")
+                    if (appName.isNotBlank() && appName.length < 50 && !appName.contains("question", ignoreCase = true)) {
+                        return when (appName.lowercase()) {
+                            "youtube" -> ParsedAction(ActionRegistry.INTENT_OPEN_YOUTUBE, "YouTube")
+                            "chrome", "google chrome", "browser" -> ParsedAction(ActionRegistry.INTENT_OPEN_CHROME, "Chrome")
+                            "calculator" -> ParsedAction(ActionRegistry.INTENT_OPEN_CALCULATOR, "Calculator")
+                            "settings" -> ParsedAction(ActionRegistry.INTENT_OPEN_SETTINGS, "Settings")
+                            "whatsapp" -> ParsedAction(ActionRegistry.INTENT_OPEN_APP, "WhatsApp")
+                            else -> ParsedAction(ActionRegistry.INTENT_OPEN_APP, appName)
+                        }
+                    }
+                }
             }
         }
 

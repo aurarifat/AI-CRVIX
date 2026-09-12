@@ -191,7 +191,7 @@ class AssistantRepository(
             val fullContent = result.content
 
             // Parse any device control intent
-            val parsedAction = ActionIntentParser.parse(fullContent)
+            val parsedAction = ActionIntentParser.parse(fullContent, userPrompt)
             val cleanContent = ActionIntentParser.cleanResponseText(fullContent)
 
             // Update database record

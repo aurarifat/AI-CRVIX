@@ -27,6 +27,8 @@
         <package android:name="com.google.android.googlequicksearchbox" />
         <package android:name="com.google.android.tts" />
         <package android:name="moe.shizuku.privileged.api" />
+        <package android:name="moe.shizuku.privileged.api.debug" />
+        <package android:name="rikka.sui" />
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
     </queries>

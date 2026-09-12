@@ -953,7 +953,7 @@ fun SettingsScreen(
 
             // 6. SHIZUKU INTEGRATION
             item {
-                SettingsCard(title = "Shizuku Integration (Optional)", icon = "⚡") {
+                SettingsCard(title = "Shizuku Integration (System Automation)", icon = "⚡") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
                             modifier = Modifier
@@ -968,7 +968,7 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Security,
+                                imageVector = if (shizukuStatus.isRunning && shizukuStatus.isPermissionGranted) Icons.Default.Check else Icons.Default.Security,
                                 contentDescription = "Shizuku",
                                 tint = if (shizukuStatus.isRunning && shizukuStatus.isPermissionGranted) Color(0xFF2E7D32)
                                 else if (shizukuStatus.isRunning) MayaYellowDeep
@@ -977,16 +977,21 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = if (shizukuStatus.isRunning) "Shizuku: Running (v${shizukuStatus.version})" else "Shizuku: Not Connected",
+                                    text = if (shizukuStatus.isRunning && shizukuStatus.isPermissionGranted) "Shizuku: Connected & Authorized (v${shizukuStatus.version})"
+                                    else if (shizukuStatus.isRunning) "Shizuku: Running (Needs Authorization)"
+                                    else if (shizukuStatus.isInstalled) "Shizuku: Service Not Running"
+                                    else "Shizuku: Not Installed",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
+                                    fontSize = 13.sp,
+                                    color = if (shizukuStatus.isRunning && shizukuStatus.isPermissionGranted) Color(0xFF2E7D32)
+                                    else MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
                                     text = when {
-                                        shizukuStatus.isRunning && shizukuStatus.isPermissionGranted -> "Permission: Granted (System Automation Active)"
-                                        shizukuStatus.isRunning -> "Permission: Not Granted (Tap Authorize or check Shizuku app)"
-                                        shizukuStatus.isInstalled -> "Service is stopped. Start via Wireless Debugging in Shizuku."
-                                        else -> "Shizuku is not installed on this device."
+                                        shizukuStatus.isRunning && shizukuStatus.isPermissionGranted -> "Permission: Granted • Privileged system automation is active."
+                                        shizukuStatus.isRunning -> "Service is active! Tap 'Authorize Now' or grant in Shizuku > Authorized Applications."
+                                        shizukuStatus.isInstalled -> "Service is stopped. Open Shizuku app and start the service (via Wireless Debugging or Root)."
+                                        else -> "Install Shizuku to grant non-root privileged permissions."
                                     },
                                     fontSize = 11.sp,
                                     color = if (shizukuStatus.isRunning && shizukuStatus.isPermissionGranted) Color(0xFF2E7D32) else MayaTextSecondary
@@ -994,52 +999,81 @@ fun SettingsScreen(
                             }
                         }
 
-                        Text(
-                            text = "Quick Setup:\n1. Start Shizuku service in Shizuku app (via Wireless Debugging or Root)\n2. Ensure 'MayaX AI' is switched ON in Shizuku > Authorized Applications\n3. Tap 'Refresh Status' below",
-                            fontSize = 11.sp,
-                            color = MayaTextSecondary,
-                            lineHeight = 16.sp
-                        )
+                        // Guidance box
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(10.dp)
+                        ) {
+                            Text(
+                                text = "How to connect Shizuku with MayaX AI:",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "1. Open the Shizuku app and confirm it says 'Shizuku is running'.\n" +
+                                        "2. In Shizuku, tap 'Authorized applications' and toggle MayaX AI ON.\n" +
+                                        "3. Return here and tap 'Refresh Status'.\n" +
+                                        "(Note: Shizuku service stops when your phone restarts; simply re-start it in Shizuku).",
+                                fontSize = 10.sp,
+                                color = MayaTextSecondary,
+                                lineHeight = 15.sp
+                            )
+                        }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             OutlinedButton(
-                                onClick = { viewModel.refreshShizukuStatus() },
+                                onClick = { viewModel.refreshShizukuStatus(force = true) },
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Refresh", fontSize = 11.sp)
                             }
-                            if (shizukuStatus.isRunning && !shizukuStatus.isPermissionGranted) {
+                            if (!shizukuStatus.isPermissionGranted) {
                                 Button(
                                     onClick = { viewModel.requestShizukuPermission() },
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = MayaYellowPrimary,
                                         contentColor = MayaTextPrimary
                                     ),
-                                    modifier = Modifier.weight(1.5f)
+                                    modifier = Modifier.weight(1.3f)
                                 ) {
-                                    Text("Authorize", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("Authorize Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
-                            } else {
-                                Button(
-                                    onClick = {
-                                        val opened = viewModel.shizukuManager.openShizukuApp()
-                                        if (!opened) {
-                                            viewModel.shizukuManager.openPlayStoreForShizuku()
-                                        }
-                                    },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MayaYellowPrimary,
-                                        contentColor = MayaTextPrimary
-                                    ),
-                                    modifier = Modifier.weight(1.5f)
-                                ) {
-                                    Text(if (shizukuStatus.isInstalled) "Open Shizuku" else "Get Shizuku", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
+                            }
+                            Button(
+                                onClick = {
+                                    val opened = viewModel.shizukuManager.openShizukuApp()
+                                    if (!opened) {
+                                        viewModel.shizukuManager.openPlayStoreForShizuku()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (shizukuStatus.isPermissionGranted) MayaYellowPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = if (shizukuStatus.isPermissionGranted) MayaTextPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                modifier = Modifier.weight(1.2f)
+                            ) {
+                                Text(if (shizukuStatus.isInstalled) "Open App" else "Get Shizuku", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (shizukuStatus.isRunning && shizukuStatus.isPermissionGranted) {
+                            OutlinedButton(
+                                onClick = { viewModel.testShizukuShell() },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Test Privileged Shell (whoami)", fontSize = 11.sp)
                             }
                         }
 

@@ -24,7 +24,7 @@ class ActionValidator(private val context: Context) {
 
         // Target validation
         val target = parsedAction.target.trim()
-        if (registered.allowedTargets.isNotEmpty()) {
+        if (registered.allowedTargets.isNotEmpty() && target.isNotBlank()) {
             val matched = registered.allowedTargets.any { it.equals(target, ignoreCase = true) }
             if (!matched) {
                 return ValidationResult.Invalid("Target '$target' is not allowed for intent $intentUpper. Permitted: ${registered.allowedTargets.joinToString()}")

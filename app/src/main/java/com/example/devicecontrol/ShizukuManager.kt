@@ -38,6 +38,17 @@ class ShizukuManager(private val context: Context) {
         )
     }
 
+    fun forceReconnect(): ShizukuStatus {
+        val bridgeStatus = bridge.forceReconnect()
+        return ShizukuStatus(
+            isInstalled = bridgeStatus.isInstalled,
+            isRunning = bridgeStatus.isRunning,
+            isPermissionGranted = bridgeStatus.isPermissionGranted,
+            version = bridgeStatus.version,
+            summary = bridgeStatus.summary
+        )
+    }
+
     fun requestPermission(): Boolean {
         return bridge.requestPermission()
     }
