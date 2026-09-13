@@ -28,6 +28,7 @@ object ActionRegistry {
 
     // Autonomous Agentic UI Automation
     const val INTENT_AGENTIC_TASK = "AGENTIC_TASK"
+    const val INTENT_TASK_PLAN = "TASK_PLAN"
     const val INTENT_CLICK_TEXT = "CLICK_TEXT"
     const val INTENT_DISMISS_POPUP = "DISMISS_POPUP"
     const val INTENT_TOGGLE_SWITCH = "TOGGLE_SWITCH"
@@ -82,6 +83,12 @@ object ActionRegistry {
         INTENT_AGENTIC_TASK to RegisteredAction(
             intent = INTENT_AGENTIC_TASK,
             description = "Execute multi-step autonomous app automation (e.g. open app, dismiss ads, click buttons, toggle switches)",
+            requiresConfirmation = false,
+            requiresShizuku = false
+        ),
+        INTENT_TASK_PLAN to RegisteredAction(
+            intent = INTENT_TASK_PLAN,
+            description = "Execute decomposed multi-task plan sequentially (Task 1, 2, 3, 4, 5...)",
             requiresConfirmation = false,
             requiresShizuku = false
         ),

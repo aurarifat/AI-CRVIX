@@ -37,6 +37,7 @@ object AgentOverlayManager {
     private var isShowing = false
 
     // UI View References
+    private var agentTagView: TextView? = null
     private var titleTextView: TextView? = null
     private var statusTextView: TextView? = null
     private var countdownBadgeView: TextView? = null
@@ -204,6 +205,95 @@ object AgentOverlayManager {
     }
 
     /**
+     * Shows or updates the HUD specifically for multi-task progress:
+     * e.g. "TASK 1 OF 3: Open Adguard"
+     */
+    fun showTaskProgress(
+        context: Context,
+        taskNumber: Int,
+        totalTasks: Int,
+        taskTitle: String,
+        status: String,
+        countdownSeconds: Int? = null,
+        icon: String? = "🤖"
+    ) {
+        show(context, taskTitle, status, countdownSeconds)
+        mainHandler.post {
+            agentTagView?.text = "TASK $taskNumber OF $totalTasks"
+            titleTextView?.text = " • $taskTitle"
+            statusTextView?.text = status
+            if (icon != null) statusIconView?.text = icon
+            val progress = (((taskNumber - 1).toFloat() / totalTasks.coerceAtLeast(1)) * 100).toInt()
+            progressBar?.isIndeterminate = false
+            progressBar?.progress = progress
+        }
+    }
+
+    /**
+     * Updates an active task's progress state
+     */
+    fun updateTask(
+        taskNumber: Int,
+        totalTasks: Int,
+        taskTitle: String,
+        status: String,
+        countdownSeconds: Int? = null,
+        progressPercent: Int? = null,
+        icon: String? = null
+    ) {
+        mainHandler.post {
+            try {
+                if (!isShowing || overlayRootView == null) return@post
+                agentTagView?.text = "TASK $taskNumber OF $totalTasks"
+                titleTextView?.text = " • $taskTitle"
+                statusTextView?.text = status
+                if (icon != null) statusIconView?.text = icon
+
+                if (countdownSeconds != null && countdownSeconds > 0) {
+                    countdownBadgeView?.visibility = View.VISIBLE
+                    countdownBadgeView?.text = "${countdownSeconds}s left"
+                } else {
+                    countdownBadgeView?.visibility = View.GONE
+                }
+
+                val currentBaseProgress = (((taskNumber - 1).toFloat() / totalTasks.coerceAtLeast(1)) * 100).toInt()
+                val taskFraction = progressPercent ?: 0
+                val totalProgress = currentBaseProgress + (taskFraction / totalTasks.coerceAtLeast(1))
+                progressBar?.isIndeterminate = false
+                progressBar?.progress = totalProgress.coerceIn(0, 100)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Failed to update task: ${t.message}")
+            }
+        }
+    }
+
+    /**
+     * Marks an individual task complete in sequence
+     */
+    fun completeTaskStep(
+        taskNumber: Int,
+        totalTasks: Int,
+        taskTitle: String,
+        isLastTask: Boolean = false
+    ) {
+        mainHandler.post {
+            try {
+                if (!isShowing || overlayRootView == null) return@post
+                val completedProgress = ((taskNumber.toFloat() / totalTasks.coerceAtLeast(1)) * 100).toInt()
+                statusIconView?.text = "✅"
+                agentTagView?.text = "TASK $taskNumber OF $totalTasks COMPLETED"
+                titleTextView?.text = " • $taskTitle"
+                statusTextView?.text = if (isLastTask) "All $totalTasks tasks finished successfully!" else "Task $taskNumber finished ✓ Preparing next..."
+                countdownBadgeView?.visibility = View.GONE
+                progressBar?.isIndeterminate = false
+                progressBar?.progress = completedProgress
+            } catch (t: Throwable) {
+                Log.e(TAG, "Failed to mark task step complete: ${t.message}")
+            }
+        }
+    }
+
+    /**
      * Dismisses and removes the overlay with an exit animation.
      */
     fun dismiss() {
@@ -226,6 +316,7 @@ object AgentOverlayManager {
                             overlayRootView = null
                             isShowing = false
                             windowManager = null
+                            agentTagView = null
                             titleTextView = null
                             statusTextView = null
                             countdownBadgeView = null
@@ -238,11 +329,13 @@ object AgentOverlayManager {
                     overlayRootView = null
                     isShowing = false
                     windowManager = null
+                    agentTagView = null
                 }
             } catch (t: Throwable) {
                 Log.e(TAG, "Failed to dismiss overlay: ${t.message}")
                 overlayRootView = null
                 isShowing = false
+                agentTagView = null
             }
         }
     }
@@ -317,6 +410,7 @@ object AgentOverlayManager {
             setTextColor(Color.parseColor("#FFD54F")) // Maya Yellow
             letterSpacing = 0.08f
         }
+        agentTagView = agentTag
         tagRow.addView(agentTag)
 
         val titleTv = TextView(context).apply {

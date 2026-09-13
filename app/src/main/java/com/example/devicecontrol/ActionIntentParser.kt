@@ -5,8 +5,21 @@ import org.json.JSONObject
 object ActionIntentParser {
 
     private val ACTION_REGEX = Regex("""ACTION:\s*(\{.+?\})""", RegexOption.DOT_MATCHES_ALL)
+    private val ACTION_LIST_REGEX = Regex("""ACTION_LIST:\s*(\[.+?\])""", RegexOption.DOT_MATCHES_ALL)
 
     fun parse(text: String, userPrompt: String = ""): ParsedAction? {
+        // Look for ACTION_LIST:[...] multi-task plan pattern
+        val listMatch = ACTION_LIST_REGEX.find(text)
+        if (listMatch != null) {
+            val jsonArrStr = listMatch.groupValues[1]
+            return ParsedAction(
+                intent = ActionRegistry.INTENT_TASK_PLAN,
+                target = "Task Plan",
+                message = jsonArrStr,
+                rawJson = jsonArrStr
+            )
+        }
+
         // Look for ACTION:{...} pattern
         val match = ACTION_REGEX.find(text)
         if (match != null) {
@@ -35,6 +48,16 @@ object ActionIntentParser {
             }
             if (lower == "turn it on" || lower == "turn on" || lower == "enable protection" || lower == "turn on protection") {
                 return ParsedAction(ActionRegistry.INTENT_TOGGLE_SWITCH, "turn on")
+            }
+
+            // Check if user input is an explicit multi-step command (e.g. "open adguard and close ads and turn it on")
+            val decomposed = AgentTaskDecomposer.decompose(candidate)
+            if (decomposed.tasks.size > 1) {
+                return ParsedAction(
+                    intent = ActionRegistry.INTENT_TASK_PLAN,
+                    target = candidate,
+                    message = candidate
+                )
             }
 
             val prefixes = listOf("open app ", "launch app ", "open ", "launch ", "start ")
@@ -110,6 +133,6 @@ object ActionIntentParser {
     }
 
     fun cleanResponseText(text: String): String {
-        return text.replace(ACTION_REGEX, "").trim()
+        return text.replace(ACTION_REGEX, "").replace(ACTION_LIST_REGEX, "").trim()
     }
 }
