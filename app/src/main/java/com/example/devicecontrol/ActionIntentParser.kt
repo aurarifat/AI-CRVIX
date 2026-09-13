@@ -24,22 +24,50 @@ object ActionIntentParser {
             }
         }
 
-        // Natural fallback from user prompt or assistant confirmation if user asks to open an app
+        // Natural fallback from user prompt or assistant confirmation if user asks to open an app or automate a task
         val candidate = userPrompt.trim().ifBlank { text.trim() }
         if (candidate.isNotBlank()) {
             val lower = candidate.lowercase()
+
+            // Direct standalone UI action commands
+            if (lower == "close ads" || lower == "close ad" || lower == "dismiss popup" || lower == "skip ad" || lower == "dismiss ads") {
+                return ParsedAction(ActionRegistry.INTENT_DISMISS_POPUP, "")
+            }
+            if (lower == "turn it on" || lower == "turn on" || lower == "enable protection" || lower == "turn on protection") {
+                return ParsedAction(ActionRegistry.INTENT_TOGGLE_SWITCH, "turn on")
+            }
+
             val prefixes = listOf("open app ", "launch app ", "open ", "launch ", "start ")
             for (p in prefixes) {
                 if (lower.startsWith(p)) {
-                    val appName = candidate.substring(p.length).trim().removeSuffix(".").removeSuffix("!")
-                    if (appName.isNotBlank() && appName.length < 50 && !appName.contains("question", ignoreCase = true)) {
-                        return when (appName.lowercase()) {
+                    val raw = candidate.substring(p.length).trim().removeSuffix(".").removeSuffix("!")
+
+                    // Check for multi-step agentic automation: e.g. "open Adguard close ads and turn it on"
+                    val agenticRegex = Regex(
+                        """^(.*?)(?:\s+(?:and\s+|then\s+|,)\s*|\s+)(close\s+ads?.*|dismiss.*|skip.*|turn\s+(?:it\s+)?on.*|enable.*|start.*|activate.*|connect.*|click\s+.+)$""",
+                        RegexOption.IGNORE_CASE
+                    )
+                    val match = agenticRegex.find(raw)
+                    if (match != null) {
+                        val extractedApp = match.groupValues[1].trim()
+                        val instructions = match.groupValues[2].trim()
+                        if (extractedApp.isNotBlank()) {
+                            return ParsedAction(
+                                intent = ActionRegistry.INTENT_AGENTIC_TASK,
+                                target = extractedApp,
+                                message = instructions
+                            )
+                        }
+                    }
+
+                    if (raw.isNotBlank() && raw.length < 50 && !raw.contains("question", ignoreCase = true)) {
+                        return when (raw.lowercase()) {
                             "youtube" -> ParsedAction(ActionRegistry.INTENT_OPEN_YOUTUBE, "YouTube")
                             "chrome", "google chrome", "browser" -> ParsedAction(ActionRegistry.INTENT_OPEN_CHROME, "Chrome")
                             "calculator" -> ParsedAction(ActionRegistry.INTENT_OPEN_CALCULATOR, "Calculator")
                             "settings" -> ParsedAction(ActionRegistry.INTENT_OPEN_SETTINGS, "Settings")
                             "whatsapp" -> ParsedAction(ActionRegistry.INTENT_OPEN_APP, "WhatsApp")
-                            else -> ParsedAction(ActionRegistry.INTENT_OPEN_APP, appName)
+                            else -> ParsedAction(ActionRegistry.INTENT_OPEN_APP, raw)
                         }
                     }
                 }
@@ -52,12 +80,25 @@ object ActionIntentParser {
     private fun parseJson(jsonStr: String): ParsedAction? {
         return try {
             val json = JSONObject(jsonStr)
-            val intent = json.optString("intent", "")
+            var intent = json.optString("intent", "").trim().uppercase()
             var target = json.optString("target", "")
             if (target.isBlank()) {
                 target = json.optString("recipient", json.optString("phone", json.optString("query", json.optString("app", ""))))
             }
             val message = json.optString("message", json.optString("text", json.optString("body", json.optString("content", ""))))
+
+            // Detect agentic intent if labeled as OPEN_APP or generic but message contains actions
+            val lowerMsg = message.lowercase()
+            if (intent == ActionRegistry.INTENT_OPEN_APP || intent == "LAUNCH_APP") {
+                if (lowerMsg.contains("close ad") || lowerMsg.contains("close ads") ||
+                    lowerMsg.contains("turn on") || lowerMsg.contains("enable") ||
+                    lowerMsg.contains("click") || lowerMsg.contains("protection") ||
+                    lowerMsg.contains("dismiss")
+                ) {
+                    intent = ActionRegistry.INTENT_AGENTIC_TASK
+                }
+            }
+
             if (intent.isNotBlank()) {
                 ParsedAction(intent = intent, target = target, message = message, rawJson = jsonStr)
             } else {

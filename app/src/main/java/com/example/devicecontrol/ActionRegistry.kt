@@ -26,6 +26,12 @@ object ActionRegistry {
     const val INTENT_PLAY_YOUTUBE = "PLAY_YOUTUBE"
     const val INTENT_OPEN_ACCESSIBILITY_SETTINGS = "OPEN_ACCESSIBILITY_SETTINGS"
 
+    // Autonomous Agentic UI Automation
+    const val INTENT_AGENTIC_TASK = "AGENTIC_TASK"
+    const val INTENT_CLICK_TEXT = "CLICK_TEXT"
+    const val INTENT_DISMISS_POPUP = "DISMISS_POPUP"
+    const val INTENT_TOGGLE_SWITCH = "TOGGLE_SWITCH"
+
     // Optional Shizuku/Advanced actions
     const val INTENT_SYSTEM_BACK = "SYSTEM_BACK"
     const val INTENT_SYSTEM_RECENTS = "SYSTEM_RECENTS"
@@ -70,6 +76,30 @@ object ActionRegistry {
         INTENT_OPEN_ACCESSIBILITY_SETTINGS to RegisteredAction(
             intent = INTENT_OPEN_ACCESSIBILITY_SETTINGS,
             description = "Open Android Accessibility Settings for agentic automation",
+            requiresConfirmation = false,
+            requiresShizuku = false
+        ),
+        INTENT_AGENTIC_TASK to RegisteredAction(
+            intent = INTENT_AGENTIC_TASK,
+            description = "Execute multi-step autonomous app automation (e.g. open app, dismiss ads, click buttons, toggle switches)",
+            requiresConfirmation = false,
+            requiresShizuku = false
+        ),
+        INTENT_CLICK_TEXT to RegisteredAction(
+            intent = INTENT_CLICK_TEXT,
+            description = "Click on-screen button or text in the active app",
+            requiresConfirmation = false,
+            requiresShizuku = false
+        ),
+        INTENT_DISMISS_POPUP to RegisteredAction(
+            intent = INTENT_DISMISS_POPUP,
+            description = "Dismiss on-screen ad, popup dialog, or promo banner",
+            requiresConfirmation = false,
+            requiresShizuku = false
+        ),
+        INTENT_TOGGLE_SWITCH to RegisteredAction(
+            intent = INTENT_TOGGLE_SWITCH,
+            description = "Toggle on-screen switch or enable protection",
             requiresConfirmation = false,
             requiresShizuku = false
         ),

@@ -307,13 +307,28 @@ fun SettingsScreen(
 
                         // Connected tools
                         if (shizukuStatus.isRunning && shizukuStatus.isPermissionGranted) {
-                            OutlinedButton(
-                                onClick = { viewModel.testShizukuShell() },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Test Privileged Shell (whoami)", fontSize = 11.sp)
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = { viewModel.grantAllShizukuPrivileges() },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF2E7D32),
+                                        contentColor = Color.White
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("⚡ One-Tap Full Device Access (Overlay, A11y & Perms)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                OutlinedButton(
+                                    onClick = { viewModel.testShizukuShell() },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Test Privileged Shell (whoami)", fontSize = 11.sp)
+                                }
                             }
                         }
 
@@ -1023,12 +1038,12 @@ fun SettingsScreen(
                 }
             }
 
-            // 5. AGENTIC WORK & WHATSAPP AUTOMATION
+            // 5. AUTONOMOUS AGENTIC AUTOMATION & APP TASKS
             item {
-                SettingsCard(title = "Agentic Work & WhatsApp Automation", icon = "💬") {
+                SettingsCard(title = "Autonomous Agentic Automation & App Tasks", icon = "🤖") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            text = "MayaX AI can perform complete multi-step tasks like opening WhatsApp, resolving contacts, and automatically sending messages.",
+                            text = "MayaX AI can perform complete multi-step tasks: launching apps, closing ads/popups, clicking buttons, and toggling switches (e.g. 'open Adguard close ads and turn it on').",
                             style = MaterialTheme.typography.bodySmall,
                             color = MayaTextSecondary
                         )
@@ -1054,8 +1069,8 @@ fun SettingsScreen(
                                     color = if (isA11yRunning) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (isA11yRunning) "Full auto-send enabled for WhatsApp and UI automations."
-                                    else "Enable in Android Settings to allow MayaX AI to auto-click Send in WhatsApp.",
+                                    text = if (isA11yRunning) "Full autonomous element detection, ad dismissal, and UI clicks active."
+                                    else "Enable in Android Settings so MayaX AI can detect on-screen buttons, dismiss popups, and toggle switches.",
                                     fontSize = 11.sp,
                                     color = MayaTextSecondary
                                 )

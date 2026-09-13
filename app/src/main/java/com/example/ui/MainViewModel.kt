@@ -593,6 +593,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun grantAllShizukuPrivileges() {
+        viewModelScope.launch {
+            _statusBanner.value = "Configuring full device access via Shizuku..."
+            val success = shizukuBridge.grantAllPrivileges()
+            if (success) {
+                _statusBanner.value = "Full device access enabled: Overlay, Accessibility & System Permissions granted!"
+            } else {
+                _statusBanner.value = "Failed to grant all privileges via Shizuku. Check authorization."
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         voiceEngine.destroy()

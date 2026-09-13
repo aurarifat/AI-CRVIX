@@ -553,6 +553,71 @@ class ShizukuBridge(private val context: Context) {
         return if (res.isSuccess) res.stdout.trim() else ""
     }
 
+    /**
+     * Enables MayaAccessibilityService automatically using privileged ADB settings commands.
+     */
+    suspend fun tryEnableAccessibilityService(): Boolean {
+        if (!checkPermission()) return false
+        val serviceComponent = "${context.packageName}/com.example.devicecontrol.MayaAccessibilityService"
+        return try {
+            val res = executeCommand("settings get secure enabled_accessibility_services")
+            val current = res.stdout.trim()
+            val newServices = if (current.isBlank() || current == "null") {
+                serviceComponent
+            } else if (!current.contains(serviceComponent)) {
+                "$current:$serviceComponent"
+            } else {
+                current
+            }
+            executeCommand("settings put secure enabled_accessibility_services $newServices")
+            executeCommand("settings put secure accessibility_enabled 1")
+            appendLog("Auto-enabled MayaAccessibilityService via Shizuku")
+            true
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to enable accessibility service via Shizuku: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Grants SYSTEM_ALERT_WINDOW (Display over other apps) permission via Shizuku appops.
+     */
+    suspend fun tryGrantOverlayPermission(): Boolean {
+        if (!checkPermission()) return false
+        return try {
+            executeCommand("cmd appops set ${context.packageName} SYSTEM_ALERT_WINDOW allow")
+            executeCommand("appops set ${context.packageName} SYSTEM_ALERT_WINDOW allow")
+            appendLog("Granted SYSTEM_ALERT_WINDOW via Shizuku appops")
+            Settings.canDrawOverlays(context)
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to grant overlay permission via Shizuku: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Full device access setup via Shizuku:
+     * grants overlay, enables accessibility service, and grants essential runtime permissions.
+     */
+    suspend fun grantAllPrivileges(): Boolean {
+        if (!checkPermission()) return false
+        val pkg = context.packageName
+        return try {
+            executeCommand("pm grant $pkg android.permission.POST_NOTIFICATIONS")
+            executeCommand("pm grant $pkg android.permission.RECORD_AUDIO")
+            executeCommand("pm grant $pkg android.permission.READ_CONTACTS")
+            executeCommand("pm grant $pkg android.permission.SEND_SMS")
+            executeCommand("pm grant $pkg android.permission.CALL_PHONE")
+            tryGrantOverlayPermission()
+            tryEnableAccessibilityService()
+            appendLog("All privileged device permissions granted via Shizuku")
+            true
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to grant all privileges: ${e.message}")
+            false
+        }
+    }
+
     private fun createProcess(cmd: Array<String>): Process {
         return try {
             val newProcessMethod = Shizuku::class.java.getDeclaredMethod(

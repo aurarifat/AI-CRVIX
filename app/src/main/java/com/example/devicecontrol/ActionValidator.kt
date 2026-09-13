@@ -31,12 +31,12 @@ class ActionValidator(private val context: Context) {
             }
         }
 
-        // For OPEN_APP, verify it's not trying to launch dangerous system internal activities
-        if (intentUpper == ActionRegistry.INTENT_OPEN_APP) {
+        // For OPEN_APP and AGENTIC_TASK, verify it's not trying to launch dangerous system internal activities
+        if (intentUpper == ActionRegistry.INTENT_OPEN_APP || intentUpper == ActionRegistry.INTENT_AGENTIC_TASK) {
             if (target.isBlank()) {
                 return ValidationResult.Invalid("App target cannot be empty.")
             }
-            // Check if user specified a package or app name
+            // Check if user specified a safe app or package name
             val isSafe = isSafeAppTarget(target)
             if (!isSafe) {
                 return ValidationResult.Invalid("Target '$target' is restricted or not launchable.")
