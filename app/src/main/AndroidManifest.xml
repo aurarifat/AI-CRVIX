@@ -11,6 +11,7 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+    <uses-permission android:name="moe.shizuku.manager.permission.API" />
 
     <queries>
         <intent>
@@ -23,6 +24,12 @@
         </intent>
         <intent>
             <action android:name="android.intent.action.RECOGNIZE_SPEECH" />
+        </intent>
+        <intent>
+            <action android:name="moe.shizuku.manager.action.REQUEST_PERMISSION" />
+        </intent>
+        <intent>
+            <action android:name="rikka.shizuku.action.REQUEST_PERMISSION" />
         </intent>
         <package android:name="com.google.android.googlequicksearchbox" />
         <package android:name="com.google.android.tts" />

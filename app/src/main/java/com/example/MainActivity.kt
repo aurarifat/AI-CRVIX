@@ -62,11 +62,14 @@ import com.example.ui.theme.MayaYellowBright
 import com.example.ui.theme.MayaYellowPrimary
 
 class MainActivity : ComponentActivity() {
+    private var mainViewModel: MainViewModel? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             val viewModel: MainViewModel = viewModel()
+            mainViewModel = viewModel
             val isDarkMode by viewModel.isDarkMode.collectAsState()
             val currentTab by viewModel.currentTab.collectAsState()
             val showOnboarding by viewModel.showOnboarding.collectAsState()
@@ -164,6 +167,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        mainViewModel?.refreshShizukuStatus(force = true)
     }
 }
 

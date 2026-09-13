@@ -275,14 +275,20 @@ class ShizukuBridge(private val context: Context) {
      */
     fun checkPermission(): Boolean {
         return try {
-            if (!Shizuku.pingBinder()) return false
-            val grantedViaSdk = try {
-                if (Shizuku.isPreV11()) false else (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED)
-            } catch (_: Throwable) {
-                false
-            }
-            val grantedViaSystem = (context.checkCallingOrSelfPermission(ShizukuManager.SHIZUKU_PERMISSION) == PackageManager.PERMISSION_GRANTED)
-            grantedViaSdk || grantedViaSystem
+            val ping = try { Shizuku.pingBinder() } catch (_: Throwable) { false }
+            val grantedViaSdk = if (ping) {
+                try {
+                    if (Shizuku.isPreV11()) false else (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED)
+                } catch (_: Throwable) {
+                    false
+                }
+            } else false
+
+            val grantedViaV23 = context.checkCallingOrSelfPermission(ShizukuManager.SHIZUKU_PERMISSION) == PackageManager.PERMISSION_GRANTED
+            val grantedViaApi = context.checkCallingOrSelfPermission("moe.shizuku.manager.permission.API") == PackageManager.PERMISSION_GRANTED
+            val grantedViaSystem = grantedViaV23 || grantedViaApi
+
+            grantedViaSdk || (ping && grantedViaSystem)
         } catch (_: Throwable) {
             false
         }
@@ -293,8 +299,9 @@ class ShizukuBridge(private val context: Context) {
      */
     fun requestPermission(requestCode: Int = REQUEST_CODE_PERMISSION): Boolean {
         return try {
-            if (!Shizuku.pingBinder()) {
-                appendLog("Cannot request permission: Shizuku service is not running")
+            val ping = try { Shizuku.pingBinder() } catch (_: Throwable) { false }
+            if (!ping) {
+                appendLog("Shizuku binder is not connected. Opening Shizuku...")
                 openShizukuApp()
                 return false
             }

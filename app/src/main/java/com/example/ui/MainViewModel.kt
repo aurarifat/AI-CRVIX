@@ -1,6 +1,8 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.ai.AIModelInfo
@@ -289,17 +291,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun refreshShizukuStatus() {
-        val bridgeStatus = shizukuBridge.refreshStatus()
-        _shizukuStatus.value = ShizukuStatus(
-            isInstalled = bridgeStatus.isInstalled,
-            isRunning = bridgeStatus.isRunning,
-            isPermissionGranted = bridgeStatus.isPermissionGranted,
-            version = bridgeStatus.version,
-            summary = bridgeStatus.summary
-        )
-    }
-
     fun refreshModels() {
         viewModelScope.launch {
             _isLoadingModels.value = true
@@ -575,11 +566,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshShizukuStatus(force: Boolean = true) {
         viewModelScope.launch {
-            if (force) {
+            val status = if (force) {
                 shizukuBridge.forceReconnect()
+            } else {
+                shizukuBridge.refreshStatus()
             }
-            val status = shizukuBridge.refreshStatus()
+            _shizukuStatus.value = ShizukuStatus(
+                isInstalled = status.isInstalled,
+                isRunning = status.isRunning,
+                isPermissionGranted = status.isPermissionGranted,
+                version = status.version,
+                summary = status.summary
+            )
             _statusBanner.value = status.summary
+        }
+    }
+
+    fun restartApp(context: Context) {
+        try {
+            val pm = context.packageManager
+            val intent = pm.getLaunchIntentForPackage(context.packageName)
+            val componentName = intent?.component
+            if (componentName != null) {
+                val restartIntent = Intent.makeRestartActivityTask(componentName)
+                context.startActivity(restartIntent)
+                Runtime.getRuntime().exit(0)
+            } else {
+                _statusBanner.value = "Please swipe away MayaX AI from recent apps and reopen."
+            }
+        } catch (e: Throwable) {
+            _statusBanner.value = "Restart manually: close app and reopen."
         }
     }
 
