@@ -34,19 +34,19 @@ object ActionRegistry {
         INTENT_SEND_WHATSAPP to RegisteredAction(
             intent = INTENT_SEND_WHATSAPP,
             description = "Send a WhatsApp message or open chat with pre-filled message",
-            requiresConfirmation = true,
+            requiresConfirmation = false,
             requiresShizuku = false
         ),
         INTENT_SEND_SMS to RegisteredAction(
             intent = INTENT_SEND_SMS,
             description = "Send or compose an SMS message to a contact",
-            requiresConfirmation = true,
+            requiresConfirmation = false,
             requiresShizuku = false
         ),
         INTENT_CALL_PHONE to RegisteredAction(
             intent = INTENT_CALL_PHONE,
             description = "Dial a contact or phone number",
-            requiresConfirmation = true,
+            requiresConfirmation = false,
             requiresShizuku = false
         ),
         INTENT_SEARCH_WEB to RegisteredAction(
@@ -58,49 +58,49 @@ object ActionRegistry {
         INTENT_OPEN_URL to RegisteredAction(
             intent = INTENT_OPEN_URL,
             description = "Open a website URL",
-            requiresConfirmation = true,
+            requiresConfirmation = false,
             requiresShizuku = false
         ),
         INTENT_PLAY_YOUTUBE to RegisteredAction(
             intent = INTENT_PLAY_YOUTUBE,
             description = "Search and play YouTube video",
-            requiresConfirmation = true,
+            requiresConfirmation = false,
             requiresShizuku = false
         ),
         INTENT_OPEN_ACCESSIBILITY_SETTINGS to RegisteredAction(
             intent = INTENT_OPEN_ACCESSIBILITY_SETTINGS,
             description = "Open Android Accessibility Settings for agentic automation",
-            requiresConfirmation = true,
+            requiresConfirmation = false,
             requiresShizuku = false
         ),
         INTENT_OPEN_APP to RegisteredAction(
             intent = INTENT_OPEN_APP,
             description = "Launch an installed Android application",
-            requiresConfirmation = true,
+            requiresConfirmation = false,
             requiresShizuku = false
         ),
         INTENT_OPEN_YOUTUBE to RegisteredAction(
             intent = INTENT_OPEN_YOUTUBE,
             description = "Open YouTube video app or website",
-            requiresConfirmation = true,
+            requiresConfirmation = false,
             requiresShizuku = false
         ),
         INTENT_OPEN_CHROME to RegisteredAction(
             intent = INTENT_OPEN_CHROME,
             description = "Open Chrome web browser",
-            requiresConfirmation = true,
+            requiresConfirmation = false,
             requiresShizuku = false
         ),
         INTENT_OPEN_CALCULATOR to RegisteredAction(
             intent = INTENT_OPEN_CALCULATOR,
             description = "Open device Calculator",
-            requiresConfirmation = true,
+            requiresConfirmation = false,
             requiresShizuku = false
         ),
         INTENT_OPEN_SETTINGS to RegisteredAction(
             intent = INTENT_OPEN_SETTINGS,
             description = "Open Android Settings page",
-            requiresConfirmation = true,
+            requiresConfirmation = false,
             requiresShizuku = false,
             allowedTargets = listOf("Settings", "WIFI", "BLUETOOTH", "BATTERY", "DISPLAY", "SOUND", "APPS", "DATE")
         ),
@@ -120,13 +120,13 @@ object ActionRegistry {
         INTENT_SYSTEM_BACK to RegisteredAction(
             intent = INTENT_SYSTEM_BACK,
             description = "Simulate Back button navigation",
-            requiresConfirmation = true,
+            requiresConfirmation = false,
             requiresShizuku = true
         ),
         INTENT_SYSTEM_RECENTS to RegisteredAction(
             intent = INTENT_SYSTEM_RECENTS,
             description = "Show recent applications",
-            requiresConfirmation = true,
+            requiresConfirmation = false,
             requiresShizuku = true
         )
     )

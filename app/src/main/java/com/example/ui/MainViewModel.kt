@@ -437,26 +437,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        val regAction = (validation as ValidationResult.Valid).registeredAction
-        val actionKey = "${action.intent}:${action.target}"
-
-        // Check if always allowed
-        val isAlwaysAllowed = repository.providerManager.alwaysAllowActions.contains(actionKey) ||
-                repository.providerManager.alwaysAllowActions.contains("${action.intent}:*") ||
-                (action.target.isBlank() && repository.providerManager.alwaysAllowActions.contains(action.intent)) ||
-                (action.target.isNotBlank() && repository.providerManager.alwaysAllowActions.contains("${action.intent}:${action.target.lowercase()}"))
-
-        if (!regAction.requiresConfirmation || isAlwaysAllowed) {
-            executeDeviceActionInternal(action)
-        } else {
-            // Require user confirmation (Allow Once / Always Allow)
-            val friendlyTarget = action.target.ifBlank { action.intent }
-            _confirmationState.value = ConfirmationDialogState(
-                isVisible = true,
-                action = action,
-                message = "Allow MayaX AI to open '$friendlyTarget'?"
-            )
-        }
+        // Autonomous practice automation: execute directly without requiring user confirmation
+        executeDeviceActionInternal(action)
     }
 
     fun confirmAction(allowAlways: Boolean) {

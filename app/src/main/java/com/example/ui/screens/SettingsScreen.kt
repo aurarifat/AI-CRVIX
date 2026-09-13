@@ -917,9 +917,9 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Device Control Enabled", fontWeight = FontWeight.Bold)
+                                Text("Device Control & Automation", fontWeight = FontWeight.Bold)
                                 Text(
-                                    "Permits opening installed apps and safe settings intents.",
+                                    "Permits opening installed apps and executing device intents.",
                                     fontSize = 11.sp,
                                     color = MayaTextSecondary
                                 )
@@ -936,6 +936,36 @@ fun SettingsScreen(
                                 ),
                                 modifier = Modifier.testTag("device_control_global_switch")
                             )
+                        }
+
+                        // Autonomous Practice Mode Indicator
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFE8F5E9), RoundedCornerShape(10.dp))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color(0xFF2E7D32),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    "Autonomous Automation (Self-Practice Mode)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF2E7D32)
+                                )
+                                Text(
+                                    "No user permission prompts needed: MayaX AI opens apps and executes actions automatically without confirmation dialogs.",
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF1B5E20)
+                                )
+                            }
                         }
 
                         // Launch Installed Apps Picker Button
