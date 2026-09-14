@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.ChatMessageEntity
 import com.example.ui.MainViewModel
+import com.example.ui.components.TaskExecutionStatusCard
 import com.example.ui.theme.MayaBorder
 import com.example.ui.theme.MayaTextPrimary
 import com.example.ui.theme.MayaTextSecondary
@@ -94,6 +95,10 @@ fun ChatScreen(
     val isGenerating by viewModel.isGenerating.collectAsState()
     val statusBanner by viewModel.statusBanner.collectAsState()
     val isDictating by viewModel.isDictating.collectAsState()
+    val isTaskExecuting by viewModel.isTaskExecuting.collectAsState()
+    val currentTaskFeedback by viewModel.currentTaskFeedback.collectAsState()
+    val taskExecutionLogs by viewModel.taskExecutionLogs.collectAsState()
+    val lastTaskSummary by viewModel.lastTaskSummary.collectAsState()
     val conversations by viewModel.conversations.collectAsState()
     val activeConvId by viewModel.activeConversationId.collectAsState()
 
@@ -226,6 +231,25 @@ fun ChatScreen(
                             color = MayaTextPrimary
                         )
                     }
+                }
+            }
+
+            // Sequential Task Manager Status Card
+            if (isTaskExecuting || taskExecutionLogs.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    TaskExecutionStatusCard(
+                        isExecuting = isTaskExecuting,
+                        currentFeedback = currentTaskFeedback,
+                        recentLogs = taskExecutionLogs,
+                        lastSummary = lastTaskSummary,
+                        onClearLogs = { viewModel.clearTaskLogs() },
+                        onRunTest = { viewModel.runTestTaskSequence() },
+                        initiallyExpanded = isTaskExecuting
+                    )
                 }
             }
 

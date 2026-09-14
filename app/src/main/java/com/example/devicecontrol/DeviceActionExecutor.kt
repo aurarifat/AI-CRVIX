@@ -526,6 +526,8 @@ class DeviceActionExecutor(
 
         val logs = mutableListOf<String>()
         var successfulTasksCount = 0
+        val taskManager = TaskManager.getInstance(context)
+        val planStartTime = System.currentTimeMillis()
 
         // Iterate through decomposed tasks one by one
         for (i in plan.tasks.indices) {
@@ -533,6 +535,14 @@ class DeviceActionExecutor(
             val taskNumber = i + 1
             val isLast = (taskNumber == totalTasks)
             task.status = AgentTaskStatus.RUNNING
+
+            val stepStartTime = System.currentTimeMillis()
+            taskManager.trackStepStart(
+                stepIndex = taskNumber,
+                totalSteps = totalTasks,
+                taskName = task.title,
+                description = task.action.target.ifBlank { task.action.intent }
+            )
 
             // 1. Show floating HUD at top of screen for this task
             AgentOverlayManager.showTaskProgress(
@@ -683,11 +693,20 @@ class DeviceActionExecutor(
                 }
             }
 
+            val stepDuration = System.currentTimeMillis() - stepStartTime
             if (outcome.isSuccess) {
                 task.status = AgentTaskStatus.COMPLETED
                 task.resultMessage = outcome.userMessage
                 successfulTasksCount++
                 logs.add("Task $taskNumber: ${task.title} ✓")
+
+                taskManager.trackStepSuccess(
+                    stepIndex = taskNumber,
+                    totalSteps = totalTasks,
+                    taskName = task.title,
+                    message = outcome.userMessage,
+                    executionTimeMs = stepDuration
+                )
 
                 AgentOverlayManager.completeTaskStep(
                     taskNumber = taskNumber,
@@ -700,6 +719,14 @@ class DeviceActionExecutor(
                 task.status = AgentTaskStatus.FAILED
                 task.resultMessage = outcome.userMessage
                 logs.add("Task $taskNumber: ${task.title} (Failed: ${outcome.userMessage})")
+
+                taskManager.trackStepFailure(
+                    stepIndex = taskNumber,
+                    totalSteps = totalTasks,
+                    taskName = task.title,
+                    errorMessage = outcome.userMessage,
+                    executionTimeMs = stepDuration
+                )
             }
         }
 
@@ -714,6 +741,20 @@ class DeviceActionExecutor(
                 "• Task ${it.taskNumber}: ${it.title} $mark"
             }
         }
+
+        taskManager.trackExecutionSummary(
+            TaskExecutionSummary(
+                isSuccess = allCompleted,
+                totalTasks = totalTasks,
+                completedTasks = successfulTasksCount,
+                failedTasks = totalTasks - successfulTasksCount,
+                skippedTasks = 0,
+                totalDurationMs = System.currentTimeMillis() - planStartTime,
+                stepResults = emptyList(),
+                logs = taskManager.getRecentLogs(),
+                summaryMessage = formattedSummary
+            )
+        )
 
         AgentOverlayManager.complete(
             successMessage = if (allCompleted) "All $totalTasks tasks completed successfully! ✓" else "Finished $successfulTasksCount of $totalTasks tasks",

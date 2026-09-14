@@ -87,6 +87,7 @@ import com.example.devicecontrol.MayaAccessibilityService
 import com.example.devicecontrol.ParsedAction
 import com.example.devicecontrol.PermissionManager
 import com.example.ui.MainViewModel
+import com.example.ui.components.TaskExecutionStatusCard
 import com.example.ui.theme.MayaBorder
 import com.example.ui.theme.MayaTextPrimary
 import com.example.ui.theme.MayaTextSecondary
@@ -110,6 +111,10 @@ fun SettingsScreen(
     val isFetchingOpenRouterModels by viewModel.isFetchingOpenRouterFreeModels.collectAsState()
     val openRouterFetchStatus by viewModel.openRouterFetchStatus.collectAsState()
     val shizukuStatus by viewModel.shizukuStatus.collectAsState()
+    val isTaskExecuting by viewModel.isTaskExecuting.collectAsState()
+    val currentTaskFeedback by viewModel.currentTaskFeedback.collectAsState()
+    val taskExecutionLogs by viewModel.taskExecutionLogs.collectAsState()
+    val lastTaskSummary by viewModel.lastTaskSummary.collectAsState()
     val actionHistory by viewModel.actionHistory.collectAsState()
     val customCommands by viewModel.customCommands.collectAsState()
     val installedApps by viewModel.installedApps.collectAsState()
@@ -331,6 +336,18 @@ fun SettingsScreen(
                                 }
                             }
                         }
+
+                        // TaskManager Sequential Commands Log & Status
+                        TaskExecutionStatusCard(
+                            isExecuting = isTaskExecuting,
+                            currentFeedback = currentTaskFeedback,
+                            recentLogs = taskExecutionLogs,
+                            lastSummary = lastTaskSummary,
+                            onClearLogs = { viewModel.clearTaskLogs() },
+                            onRunTest = { viewModel.runTestTaskSequence() },
+                            initiallyExpanded = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
 
                         // Recovery tools when stopped or not connected
                         if (!shizukuStatus.isRunning) {

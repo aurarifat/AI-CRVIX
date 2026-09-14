@@ -2,7 +2,10 @@ package com.example.devicecontrol
 
 import android.content.Context
 import android.util.Log
+import com.example.data.local.ActionHistoryEntity
+import com.example.data.local.AppDatabase
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -12,6 +15,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
@@ -287,7 +291,16 @@ data class TaskLogEntry(
     val taskName: String,
     val level: TaskLogLevel,
     val message: String,
-    val commandResult: ShizukuCommandResult? = null
+    val commandResult: ShizukuCommandResult? = null,
+    val status: TaskStepStatus = when (level) {
+        TaskLogLevel.SUCCESS -> TaskStepStatus.SUCCESS
+        TaskLogLevel.ERROR -> TaskStepStatus.FAILED
+        TaskLogLevel.WARNING -> TaskStepStatus.SKIPPED
+        TaskLogLevel.INFO -> TaskStepStatus.RUNNING
+        else -> TaskStepStatus.PENDING
+    },
+    val totalSteps: Int = 0,
+    val executionTimeMs: Long = 0L
 ) {
     fun toFormattedString(): String {
         val levelIcon = when (level) {
@@ -297,8 +310,11 @@ data class TaskLogEntry(
             TaskLogLevel.ERROR -> "❌"
             TaskLogLevel.DEBUG -> "🔍"
         }
-        val stepPrefix = if (stepIndex > 0) "[Step $stepIndex] " else ""
-        return "$levelIcon $stepPrefix$taskName: $message"
+        val stepPrefix = if (stepIndex > 0) {
+            if (totalSteps > 0) "[Step $stepIndex/$totalSteps] " else "[Step $stepIndex] "
+        } else ""
+        val durationSuffix = if (executionTimeMs > 0) " (${executionTimeMs}ms)" else ""
+        return "$levelIcon $stepPrefix$taskName: $message$durationSuffix"
     }
 }
 
@@ -519,9 +535,19 @@ class TaskManager(
                     taskName = task.name,
                     level = TaskLogLevel.SUCCESS,
                     message = "$resultMessage (${stepDuration}ms)",
-                    cmdResult = cmdResult
+                    cmdResult = cmdResult,
+                    totalSteps = totalTasks,
+                    durationMs = stepDuration,
+                    status = TaskStepStatus.SUCCESS
                 )
                 runLogs.add(successLog)
+
+                persistLogToDatabase(
+                    actionType = "COMMAND_STEP_${stepNumber}_OF_${totalTasks}",
+                    target = task.name,
+                    status = "Successful",
+                    details = "$resultMessage (Duration: ${stepDuration}ms)"
+                )
 
                 val stepResult = TaskStepResult(
                     stepIndex = stepNumber,
@@ -564,9 +590,19 @@ class TaskManager(
                     taskName = task.name,
                     level = TaskLogLevel.ERROR,
                     message = failureMsg,
-                    cmdResult = cmdResult
+                    cmdResult = cmdResult,
+                    totalSteps = totalTasks,
+                    durationMs = stepDuration,
+                    status = TaskStepStatus.FAILED
                 )
                 runLogs.add(failLog)
+
+                persistLogToDatabase(
+                    actionType = "COMMAND_STEP_${stepNumber}_OF_${totalTasks}",
+                    target = task.name,
+                    status = "Failed",
+                    details = "$failureMsg (Duration: ${stepDuration}ms)"
+                )
 
                 val stepResult = TaskStepResult(
                     stepIndex = stepNumber,
@@ -795,19 +831,169 @@ class TaskManager(
     // Logging & Feedback Helpers
     // =========================================================================
 
-    private fun logStep(
+    fun getRecentLogs(): List<TaskLogEntry> = _recentLogs.value
+
+    fun trackStepStart(
+        stepIndex: Int,
+        totalSteps: Int,
+        taskName: String,
+        description: String
+    ): TaskLogEntry {
+        _isExecuting.value = true
+        val entry = logStep(
+            stepIndex = stepIndex,
+            taskName = taskName,
+            level = TaskLogLevel.INFO,
+            message = "Starting command: $description",
+            totalSteps = totalSteps,
+            status = TaskStepStatus.RUNNING
+        )
+        val feedback = TaskStepFeedback(
+            stepIndex = stepIndex,
+            totalSteps = totalSteps,
+            task = CustomShizukuTask(taskName, description, { ShizukuCommandResult(true, 0, "", "") }),
+            status = TaskStepStatus.RUNNING,
+            message = "Executing: $taskName",
+            progressPercent = if (totalSteps > 0) (((stepIndex - 1).toFloat() / totalSteps) * 100).toInt() else 0
+        )
+        _currentFeedback.value = feedback
+        return entry
+    }
+
+    fun trackStepSuccess(
+        stepIndex: Int,
+        totalSteps: Int,
+        taskName: String,
+        message: String,
+        executionTimeMs: Long,
+        cmdResult: ShizukuCommandResult? = null
+    ): TaskLogEntry {
+        val entry = logStep(
+            stepIndex = stepIndex,
+            taskName = taskName,
+            level = TaskLogLevel.SUCCESS,
+            message = message,
+            cmdResult = cmdResult,
+            totalSteps = totalSteps,
+            durationMs = executionTimeMs,
+            status = TaskStepStatus.SUCCESS
+        )
+        val feedback = TaskStepFeedback(
+            stepIndex = stepIndex,
+            totalSteps = totalSteps,
+            task = CustomShizukuTask(taskName, message, { cmdResult ?: ShizukuCommandResult(true, 0, "", "") }),
+            status = TaskStepStatus.SUCCESS,
+            message = message,
+            progressPercent = if (totalSteps > 0) ((stepIndex.toFloat() / totalSteps) * 100).toInt() else 100,
+            commandResult = cmdResult
+        )
+        _currentFeedback.value = feedback
+
+        persistLogToDatabase(
+            actionType = if (totalSteps > 0) "COMMAND_STEP_${stepIndex}_OF_${totalSteps}" else "COMMAND_STEP_$stepIndex",
+            target = taskName,
+            status = "Successful",
+            details = "$message (Duration: ${executionTimeMs}ms)"
+        )
+        return entry
+    }
+
+    fun trackStepFailure(
+        stepIndex: Int,
+        totalSteps: Int,
+        taskName: String,
+        errorMessage: String,
+        executionTimeMs: Long,
+        cmdResult: ShizukuCommandResult? = null
+    ): TaskLogEntry {
+        val entry = logStep(
+            stepIndex = stepIndex,
+            taskName = taskName,
+            level = TaskLogLevel.ERROR,
+            message = errorMessage,
+            cmdResult = cmdResult,
+            totalSteps = totalSteps,
+            durationMs = executionTimeMs,
+            status = TaskStepStatus.FAILED
+        )
+        val feedback = TaskStepFeedback(
+            stepIndex = stepIndex,
+            totalSteps = totalSteps,
+            task = CustomShizukuTask(taskName, errorMessage, { cmdResult ?: ShizukuCommandResult(false, 1, "", errorMessage) }),
+            status = TaskStepStatus.FAILED,
+            message = errorMessage,
+            progressPercent = if (totalSteps > 0) ((stepIndex.toFloat() / totalSteps) * 100).toInt() else 100,
+            commandResult = cmdResult
+        )
+        _currentFeedback.value = feedback
+
+        persistLogToDatabase(
+            actionType = if (totalSteps > 0) "COMMAND_STEP_${stepIndex}_OF_${totalSteps}" else "COMMAND_STEP_$stepIndex",
+            target = taskName,
+            status = "Failed",
+            details = "$errorMessage (Duration: ${executionTimeMs}ms)"
+        )
+        return entry
+    }
+
+    fun trackExecutionSummary(summary: TaskExecutionSummary) {
+        _isExecuting.value = false
+        _lastSummary.value = summary
+        logStep(
+            stepIndex = 0,
+            taskName = "Sequence Complete",
+            level = if (summary.isSuccess) TaskLogLevel.SUCCESS else TaskLogLevel.WARNING,
+            message = summary.summaryMessage,
+            totalSteps = summary.totalTasks,
+            durationMs = summary.totalDurationMs,
+            status = if (summary.isSuccess) TaskStepStatus.SUCCESS else TaskStepStatus.FAILED
+        )
+    }
+
+    fun persistLogToDatabase(actionType: String, target: String, status: String, details: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val db = AppDatabase.getDatabase(context)
+                db.actionHistoryDao().insertAction(
+                    ActionHistoryEntity(
+                        actionType = actionType,
+                        target = target,
+                        status = status,
+                        details = details
+                    )
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to persist task log to database: ${e.message}")
+            }
+        }
+    }
+
+    fun logStep(
         stepIndex: Int,
         taskName: String,
         level: TaskLogLevel,
         message: String,
-        cmdResult: ShizukuCommandResult? = null
+        cmdResult: ShizukuCommandResult? = null,
+        totalSteps: Int = 0,
+        durationMs: Long = 0L,
+        status: TaskStepStatus? = null
     ): TaskLogEntry {
+        val resolvedStatus = status ?: when (level) {
+            TaskLogLevel.SUCCESS -> TaskStepStatus.SUCCESS
+            TaskLogLevel.ERROR -> TaskStepStatus.FAILED
+            TaskLogLevel.WARNING -> TaskStepStatus.SKIPPED
+            TaskLogLevel.INFO -> TaskStepStatus.RUNNING
+            else -> TaskStepStatus.PENDING
+        }
         val entry = TaskLogEntry(
             stepIndex = stepIndex,
             taskName = taskName,
             level = level,
             message = message,
-            commandResult = cmdResult
+            commandResult = cmdResult,
+            status = resolvedStatus,
+            totalSteps = totalSteps,
+            executionTimeMs = durationMs
         )
 
         when (level) {

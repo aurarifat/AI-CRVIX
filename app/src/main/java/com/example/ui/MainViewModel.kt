@@ -16,12 +16,17 @@ import com.example.data.local.CustomCommandEntity
 import com.example.data.local.MemoryFactEntity
 import com.example.data.repository.AssistantRepository
 import com.example.devicecontrol.ActionRegistry
+import com.example.devicecontrol.DelayTask
 import com.example.devicecontrol.InstalledAppItem
 import com.example.devicecontrol.ParsedAction
 import com.example.devicecontrol.PermissionManager
 import com.example.devicecontrol.ShizukuBridge
 import com.example.devicecontrol.ShizukuManager
 import com.example.devicecontrol.ShizukuStatus
+import com.example.devicecontrol.TaskExecutionSummary
+import com.example.devicecontrol.TaskLogEntry
+import com.example.devicecontrol.TaskManager
+import com.example.devicecontrol.TaskStepFeedback
 import com.example.devicecontrol.ValidationResult
 import com.example.voice.VoiceEngine
 import com.example.voice.VoiceSettings
@@ -53,6 +58,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val shizukuBridge = ShizukuBridge.getInstance(application)
     val shizukuManager = ShizukuManager(application)
     val permissionManager = PermissionManager(application)
+    val taskManager = TaskManager.getInstance(application)
+
+    // TaskManager Reactive Logs & Execution Status
+    val taskExecutionLogs: StateFlow<List<TaskLogEntry>> = taskManager.recentLogs
+    val isTaskExecuting: StateFlow<Boolean> = taskManager.isExecuting
+    val currentTaskFeedback: StateFlow<TaskStepFeedback?> = taskManager.currentFeedback
+    val lastTaskSummary: StateFlow<TaskExecutionSummary?> = taskManager.lastSummary
 
     // Current Navigation Tab
     private val _currentTab = MutableStateFlow(AppTab.HOME)
@@ -602,6 +614,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 _statusBanner.value = "Failed to grant all privileges via Shizuku. Check authorization."
             }
+        }
+    }
+
+    fun clearTaskLogs() {
+        taskManager.clearLogs()
+    }
+
+    fun runTestTaskSequence() {
+        viewModelScope.launch {
+            val testTasks = listOf(
+                DelayTask(150L, "1. Verify Shizuku Bridge", "Checking binder authorization and privileged shell state"),
+                DelayTask(200L, "2. Scan Active UI Screen", "Inspecting accessibility nodes and clickable elements"),
+                DelayTask(150L, "3. Execute Action Sequence", "Confirming device command execution and status reporting")
+            )
+            taskManager.executeTasks(testTasks)
         }
     }
 

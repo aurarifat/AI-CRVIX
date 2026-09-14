@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.AppTab
 import com.example.ui.MainViewModel
 import com.example.ui.components.MayaXAnimatedOrb
+import com.example.ui.components.TaskExecutionStatusCard
 import com.example.ui.theme.MayaBorder
 import com.example.ui.theme.MayaTextPrimary
 import com.example.ui.theme.MayaTextSecondary
@@ -81,6 +82,10 @@ fun HomeScreen(
     val statusMsg by viewModel.voiceEngine.statusMessage.collectAsState()
     val statusBanner by viewModel.statusBanner.collectAsState()
     val isDictating by viewModel.isDictating.collectAsState()
+    val isTaskExecuting by viewModel.isTaskExecuting.collectAsState()
+    val currentTaskFeedback by viewModel.currentTaskFeedback.collectAsState()
+    val taskExecutionLogs by viewModel.taskExecutionLogs.collectAsState()
+    val lastTaskSummary by viewModel.lastTaskSummary.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val permManager = remember { PermissionManager(context) }
 
@@ -198,6 +203,20 @@ fun HomeScreen(
                         modifier = Modifier.padding(12.dp)
                     )
                 }
+            }
+
+            // Sequential Task Manager Status Card
+            if (isTaskExecuting || taskExecutionLogs.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(14.dp))
+                TaskExecutionStatusCard(
+                    isExecuting = isTaskExecuting,
+                    currentFeedback = currentTaskFeedback,
+                    recentLogs = taskExecutionLogs,
+                    lastSummary = lastTaskSummary,
+                    onClearLogs = { viewModel.clearTaskLogs() },
+                    onRunTest = { viewModel.runTestTaskSequence() },
+                    initiallyExpanded = isTaskExecuting
+                )
             }
 
             Spacer(modifier = Modifier.height(36.dp))
