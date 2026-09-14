@@ -85,6 +85,94 @@ class MayaAccessibilityService : AccessibilityService() {
     // Agentic UI Automation & Element Interaction Engine
     // =========================================================================
 
+    data class ScreenNodeItem(
+        val text: String = "",
+        val contentDescription: String = "",
+        val viewId: String = "",
+        val className: String = "",
+        val bounds: Rect = Rect(),
+        val isClickable: Boolean = false,
+        val isCheckable: Boolean = false,
+        val isChecked: Boolean = false,
+        val isEnabled: Boolean = true
+    )
+
+    data class ScreenInspection(
+        val packageName: String,
+        val allTexts: List<String>,
+        val interactiveNodes: List<ScreenNodeItem>,
+        val fullHierarchySummary: String
+    )
+
+    /**
+     * Traverses and inspects the entire active screen hierarchy.
+     */
+    fun inspectEntireScreen(): ScreenInspection {
+        val root = rootInActiveWindow
+        val pkg = root?.packageName?.toString() ?: ""
+        val texts = mutableListOf<String>()
+        val interactive = mutableListOf<ScreenNodeItem>()
+
+        if (root != null) {
+            findNodesRecursively(root) { node ->
+                val t = node.text?.toString()?.trim() ?: ""
+                val d = node.contentDescription?.toString()?.trim() ?: ""
+                val id = node.viewIdResourceName ?: ""
+                val cls = node.className?.toString() ?: ""
+                val rect = Rect()
+                node.getBoundsInScreen(rect)
+
+                if (t.isNotBlank() && !texts.contains(t)) texts.add(t)
+                if (d.isNotBlank() && !texts.contains(d)) texts.add(d)
+
+                if (node.isClickable || node.isCheckable || t.isNotBlank() || d.isNotBlank() || id.isNotBlank()) {
+                    interactive.add(
+                        ScreenNodeItem(
+                            text = t,
+                            contentDescription = d,
+                            viewId = id,
+                            className = cls,
+                            bounds = rect,
+                            isClickable = node.isClickable,
+                            isCheckable = node.isCheckable,
+                            isChecked = node.isChecked,
+                            isEnabled = node.isEnabled
+                        )
+                    )
+                }
+                false
+            }
+        }
+
+        val summary = buildString {
+            appendLine("App Package: $pkg")
+            appendLine("Visible Texts (${texts.size}): ${texts.joinToString(" | ")}")
+            appendLine("Interactive Elements: ${interactive.size}")
+        }
+
+        return ScreenInspection(pkg, texts, interactive, summary)
+    }
+
+    /**
+     * Returns a clear, human-readable summary of all visible text on the active device screen.
+     */
+    fun readVisibleTextSummary(): String {
+        val root = rootInActiveWindow ?: return "Screen is currently not accessible."
+        val texts = mutableListOf<String>()
+        findNodesRecursively(root) { node ->
+            val t = node.text?.toString()?.trim()
+            val d = node.contentDescription?.toString()?.trim()
+            if (!t.isNullOrBlank() && !texts.contains(t)) texts.add(t)
+            if (!d.isNullOrBlank() && !texts.contains(d)) texts.add(d)
+            false
+        }
+        return if (texts.isEmpty()) {
+            "No readable text found on the active screen."
+        } else {
+            texts.joinToString("\n") { "• $it" }
+        }
+    }
+
     /**
      * Traverses the active window node hierarchy and collects nodes matching predicate.
      */
@@ -95,12 +183,16 @@ class MayaAccessibilityService : AccessibilityService() {
         val results = mutableListOf<AccessibilityNodeInfo>()
         if (root == null) return results
         fun traverse(node: AccessibilityNodeInfo) {
-            if (predicate(node)) {
-                results.add(node)
-            }
-            for (i in 0 until node.childCount) {
-                val child = node.getChild(i) ?: continue
-                traverse(child)
+            try {
+                if (predicate(node)) {
+                    results.add(node)
+                }
+                for (i in 0 until node.childCount) {
+                    val child = node.getChild(i) ?: continue
+                    traverse(child)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "traverse error: ${e.message}")
             }
         }
         traverse(root)
@@ -145,28 +237,41 @@ class MayaAccessibilityService : AccessibilityService() {
     /**
      * Dispatches a tap gesture to exact screen coordinates using Android Accessibility Gestures.
      */
-    fun clickCoordinates(x: Float, y: Float) {
+    fun clickCoordinates(x: Float, y: Float): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             val path = Path().apply {
                 moveTo(x, y)
             }
             val gesture = GestureDescription.Builder()
-                .addStroke(GestureDescription.StrokeDescription(path, 0, 50))
+                .addStroke(GestureDescription.StrokeDescription(path, 0, 60))
                 .build()
-            dispatchGesture(gesture, null, null)
+            return dispatchGesture(gesture, null, null)
         }
+        return false
+    }
+
+    /**
+     * Dispatches a tap to the center of the active device display.
+     */
+    fun tapCenterScreen(): Boolean {
+        val displayMetrics = resources.displayMetrics
+        val centerX = displayMetrics.widthPixels / 2f
+        val centerY = displayMetrics.heightPixels * 0.48f
+        return clickCoordinates(centerX, centerY)
     }
 
     /**
      * Detects and dismisses popup advertisements, promotional dialogs, upgrade offers,
      * and close/cancel buttons on screen.
+     * Crucially: Returns false without performing any exit or back actions if no popups exist.
      */
     fun dismissPopupsOrAds(): Boolean {
         val root = rootInActiveWindow ?: return false
         val closeKeywords = listOf(
             "close", "dismiss", "skip", "no thanks", "later", "not now",
             "continue with free", "got it", "✕", "✖", "x", "remind me later",
-            "cancel", "decline", "not interested", "maybe later", "skip ad", "skip video"
+            "cancel", "decline", "not interested", "maybe later", "skip ad", "skip video",
+            "free version", "continue free", "close dialog", "agree & continue"
         )
         val idKeywords = listOf(
             "close", "dismiss", "cancel", "btn_close", "cross", "iv_close",
@@ -221,10 +326,16 @@ class MayaAccessibilityService : AccessibilityService() {
             }
         }
 
-        // 2. Look for keywords in text or contentDescription (e.g. Turn on, Protection, Enable, Start)
+        // 2. Look for keywords in text, contentDescription, or viewId
         val powerKeywords = if (customKeywords.isNotEmpty()) customKeywords else listOf(
-            "turn on", "enable", "protection", "start", "connect",
-            "activate", "switch on", "power", "shield", "turn protection on", "protect"
+            "turn on", "enable", "protection", "protect", "start", "connect",
+            "activate", "switch on", "power", "shield", "turn protection on",
+            "paused", "disabled", "off", "tap to enable", "resume"
+        )
+        val powerIdKeywords = listOf(
+            "main_switch", "switch_protection", "protection_switch", "power_button",
+            "btn_power", "btn_protect", "shield", "switch", "status_switch",
+            "circle_switch", "protection_toggle", "main_protection"
         )
 
         val powerNodes = findNodesRecursively(root) { node ->
@@ -232,28 +343,61 @@ class MayaAccessibilityService : AccessibilityService() {
             val desc = node.contentDescription?.toString()?.trim() ?: ""
             val viewId = node.viewIdResourceName?.lowercase() ?: ""
 
-            powerKeywords.any { kw ->
-                text.contains(kw, ignoreCase = true) ||
-                desc.contains(kw, ignoreCase = true) ||
-                viewId.contains(kw.replace(" ", "_"))
+            val textMatch = powerKeywords.any { kw ->
+                text.contains(kw, ignoreCase = true) || desc.contains(kw, ignoreCase = true)
             }
+            val idMatch = powerIdKeywords.any { viewId.contains(it) }
+
+            textMatch || idMatch
         }
 
         for (pNode in powerNodes) {
             if (clickNode(pNode)) {
-                Log.d(TAG, "Activated power/protection button: ${pNode.text ?: pNode.contentDescription}")
+                Log.d(TAG, "Activated power/protection button: ${pNode.text ?: pNode.contentDescription ?: pNode.viewIdResourceName}")
                 return true
             }
         }
 
-        // 3. Fallback: if there are any switch widgets on screen, toggle the first one
+        // 3. Special handling for AdGuard / VPN style apps:
+        val pkgName = root.packageName?.toString()?.lowercase() ?: ""
+        val screenTexts = getVisibleScreenText()
+        val isAdGuardOrSecurityApp = pkgName.contains("adguard") || screenTexts.any { it.contains("adguard", ignoreCase = true) }
+
+        if (isAdGuardOrSecurityApp) {
+            // Find any node in the upper-center of the screen representing the shield or status
+            val displayMetrics = resources.displayMetrics
+            val midY = displayMetrics.heightPixels * 0.48f
+            val midX = displayMetrics.widthPixels / 2f
+
+            // Look for any clickable view within 150px of center
+            val centerCandidates = findNodesRecursively(root) { node ->
+                val rect = Rect()
+                node.getBoundsInScreen(rect)
+                rect.contains(midX.toInt(), midY.toInt()) && (node.isClickable || node.childCount == 0)
+            }
+            if (centerCandidates.isNotEmpty()) {
+                val candidate = centerCandidates.last()
+                if (clickNode(candidate)) {
+                    Log.d(TAG, "Clicked AdGuard center shield view: ${candidate.className}")
+                    return true
+                }
+            }
+
+            // Fallback: Gesture tap to center shield coordinates
+            clickCoordinates(midX, midY)
+            Log.d(TAG, "Dispatched gesture tap to AdGuard center shield coordinates ($midX, $midY)")
+            return true
+        }
+
+        // 4. Fallback: if there are any switch widgets on screen, toggle the first one
         if (switches.isNotEmpty()) {
             if (clickNode(switches.first())) {
                 return true
             }
         }
 
-        return false
+        // 5. Final fallback: tap center of screen
+        return tapCenterScreen()
     }
 
     /**

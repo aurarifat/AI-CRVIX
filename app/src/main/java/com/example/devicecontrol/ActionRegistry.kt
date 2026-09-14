@@ -26,12 +26,14 @@ object ActionRegistry {
     const val INTENT_PLAY_YOUTUBE = "PLAY_YOUTUBE"
     const val INTENT_OPEN_ACCESSIBILITY_SETTINGS = "OPEN_ACCESSIBILITY_SETTINGS"
 
-    // Autonomous Agentic UI Automation
+    // Autonomous Agentic UI Automation & Screen Reading
     const val INTENT_AGENTIC_TASK = "AGENTIC_TASK"
     const val INTENT_TASK_PLAN = "TASK_PLAN"
     const val INTENT_CLICK_TEXT = "CLICK_TEXT"
     const val INTENT_DISMISS_POPUP = "DISMISS_POPUP"
     const val INTENT_TOGGLE_SWITCH = "TOGGLE_SWITCH"
+    const val INTENT_READ_SCREEN = "READ_SCREEN"
+    const val INTENT_TAP_COORDINATES = "TAP_COORDINATES"
 
     // Optional Shizuku/Advanced actions
     const val INTENT_SYSTEM_BACK = "SYSTEM_BACK"
@@ -107,6 +109,18 @@ object ActionRegistry {
         INTENT_TOGGLE_SWITCH to RegisteredAction(
             intent = INTENT_TOGGLE_SWITCH,
             description = "Toggle on-screen switch or enable protection",
+            requiresConfirmation = false,
+            requiresShizuku = false
+        ),
+        INTENT_READ_SCREEN to RegisteredAction(
+            intent = INTENT_READ_SCREEN,
+            description = "Inspect and read all visible text and interactive UI elements on the active device screen",
+            requiresConfirmation = false,
+            requiresShizuku = false
+        ),
+        INTENT_TAP_COORDINATES to RegisteredAction(
+            intent = INTENT_TAP_COORDINATES,
+            description = "Tap on specific screen coordinates (X, Y)",
             requiresConfirmation = false,
             requiresShizuku = false
         ),

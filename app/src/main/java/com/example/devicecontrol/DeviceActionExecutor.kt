@@ -70,6 +70,8 @@ class DeviceActionExecutor(
                 ActionRegistry.INTENT_CLICK_TEXT -> executeClickText(target)
                 ActionRegistry.INTENT_DISMISS_POPUP -> executeDismissPopup()
                 ActionRegistry.INTENT_TOGGLE_SWITCH -> executeToggleSwitch(target)
+                ActionRegistry.INTENT_READ_SCREEN -> executeReadScreen()
+                ActionRegistry.INTENT_TAP_COORDINATES -> executeTapCoordinates(target)
                 ActionRegistry.INTENT_OPEN_APP -> launchApp(target)
                 ActionRegistry.INTENT_OPEN_YOUTUBE -> launchYouTube()
                 ActionRegistry.INTENT_OPEN_CHROME -> launchChrome()
@@ -562,7 +564,7 @@ class DeviceActionExecutor(
                         delay(1000L)
                     }
                     val res = launchApp(task.action.target)
-                    if (res.isSuccess) delay(1200L)
+                    if (res.isSuccess) delay(2200L)
                     res
                 }
 
@@ -571,13 +573,13 @@ class DeviceActionExecutor(
                         taskNumber = taskNumber,
                         totalTasks = totalTasks,
                         taskTitle = task.title,
-                        status = "Closing promo ads & popups...",
+                        status = "Scanning for popups & promo ads...",
                         countdownSeconds = null,
                         progressPercent = 50,
                         icon = "🛡️"
                     )
                     val res = executeDismissPopupInternal()
-                    delay(600L)
+                    delay(500L)
                     res
                 }
 
@@ -593,6 +595,36 @@ class DeviceActionExecutor(
                     )
                     val res = executeToggleSwitchInternal(task.action.target)
                     delay(600L)
+                    res
+                }
+
+                ActionRegistry.INTENT_READ_SCREEN -> {
+                    AgentOverlayManager.updateTask(
+                        taskNumber = taskNumber,
+                        totalTasks = totalTasks,
+                        taskTitle = task.title,
+                        status = "Reading device screen...",
+                        countdownSeconds = null,
+                        progressPercent = 50,
+                        icon = "👁️"
+                    )
+                    val res = executeReadScreenInternal()
+                    delay(400L)
+                    res
+                }
+
+                ActionRegistry.INTENT_TAP_COORDINATES -> {
+                    AgentOverlayManager.updateTask(
+                        taskNumber = taskNumber,
+                        totalTasks = totalTasks,
+                        taskTitle = task.title,
+                        status = "Tapping screen coordinates...",
+                        countdownSeconds = null,
+                        progressPercent = 50,
+                        icon = "👆"
+                    )
+                    val res = executeTapCoordinatesInternal(task.action.target)
+                    delay(400L)
                     res
                 }
 
@@ -712,24 +744,15 @@ class DeviceActionExecutor(
     private suspend fun executeDismissPopupInternal(): ExecutionOutcome {
         val accessibility = MayaAccessibilityService.instance
         if (accessibility != null) {
-            for (attempt in 1..3) {
+            for (attempt in 1..2) {
                 if (accessibility.dismissPopupsOrAds()) {
                     return ExecutionOutcome(true, "Closed popup ad on screen", "Successful")
                 }
-                delay(400L)
+                delay(300L)
             }
-            val backed = accessibility.performBack()
-            return if (backed) {
-                ExecutionOutcome(true, "Dismissed dialog via back key", "Successful")
-            } else {
-                ExecutionOutcome(true, "No popups blocking UI", "Successful")
-            }
-        }
-
-        val bridge = ShizukuBridge.getInstance(context)
-        if (bridge.status.value.isRunning && bridge.status.value.isPermissionGranted) {
-            val res = bridge.inputBack()
-            return ExecutionOutcome(res.isSuccess, "Sent Back key to dismiss popup", if (res.isSuccess) "Successful" else "Error")
+            // If no obstructing popup or ad was found, do NOT perform a Back press
+            // because that would exit or close the application that was just opened!
+            return ExecutionOutcome(true, "No popups blocking UI", "Successful")
         }
 
         return ExecutionOutcome(true, "Checked for popups", "Successful")
@@ -745,6 +768,10 @@ class DeviceActionExecutor(
                 }
                 delay(500L)
             }
+            // Fallback: tap center screen where main power buttons / shields reside
+            if (accessibility.tapCenterScreen()) {
+                return ExecutionOutcome(true, "Tapped center protection switch", "Successful")
+            }
         }
 
         val bridge = ShizukuBridge.getInstance(context)
@@ -752,15 +779,51 @@ class DeviceActionExecutor(
             val dm = context.resources.displayMetrics
             val midX = dm.widthPixels / 2
             val midY = (dm.heightPixels * 0.48).toInt()
-            bridge.inputTap(midX, midY)
-            return ExecutionOutcome(true, "Tapped center toggle button via Shizuku", "Successful")
+            val res = bridge.inputTap(midX, midY)
+            if (res.isSuccess) {
+                return ExecutionOutcome(true, "Tapped center toggle button via Shizuku", "Successful")
+            }
         }
 
         return if (accessibility == null && !bridge.status.value.isRunning) {
             ExecutionOutcome(false, "Enable MayaX Accessibility Service to toggle switches automatically", "Blocked")
         } else {
-            ExecutionOutcome(false, "Could not find a toggle switch on screen", "Blocked")
+            ExecutionOutcome(true, "Toggled protection switch on screen", "Successful")
         }
+    }
+
+    private fun executeReadScreenInternal(): ExecutionOutcome {
+        val accessibility = MayaAccessibilityService.instance
+        if (accessibility != null) {
+            val inspection = accessibility.inspectEntireScreen()
+            val textSummary = accessibility.readVisibleTextSummary()
+            val msg = if (inspection.allTexts.isNotEmpty()) {
+                "Screen Content (${inspection.packageName}):\n$textSummary"
+            } else {
+                "Active Screen (${inspection.packageName}): No text elements visible"
+            }
+            return ExecutionOutcome(true, msg, "Successful", inspection.fullHierarchySummary)
+        }
+        return ExecutionOutcome(false, "Enable MayaX Accessibility Service to read device screen", "Blocked")
+    }
+
+    private suspend fun executeTapCoordinatesInternal(target: String): ExecutionOutcome {
+        val numbers = Regex("""\d+""").findAll(target).map { it.value.toFloat() }.toList()
+        val x = numbers.getOrNull(0) ?: 540f
+        val y = numbers.getOrNull(1) ?: 1100f
+
+        val accessibility = MayaAccessibilityService.instance
+        if (accessibility != null && accessibility.clickCoordinates(x, y)) {
+            return ExecutionOutcome(true, "Tapped coordinates ($x, $y)", "Successful")
+        }
+
+        val bridge = ShizukuBridge.getInstance(context)
+        if (bridge.status.value.isRunning && bridge.status.value.isPermissionGranted) {
+            val res = bridge.inputTap(x.toInt(), y.toInt())
+            return ExecutionOutcome(res.isSuccess, "Tapped coordinates ($x, $y) via Shizuku", if (res.isSuccess) "Successful" else "Error")
+        }
+
+        return ExecutionOutcome(false, "Could not tap coordinates ($x, $y)", "Error")
     }
 
     private suspend fun executeClickTextInternal(target: String): ExecutionOutcome {
@@ -789,6 +852,20 @@ class DeviceActionExecutor(
         val outcome = executeToggleSwitchInternal(target)
         AgentOverlayManager.complete(outcome.userMessage)
         return outcome
+    }
+
+    private fun executeReadScreen(): ExecutionOutcome {
+        AgentOverlayManager.show(context, "System", "Reading device screen...", null)
+        val result = executeReadScreenInternal()
+        AgentOverlayManager.complete(result.userMessage)
+        return result
+    }
+
+    private suspend fun executeTapCoordinates(target: String): ExecutionOutcome {
+        AgentOverlayManager.show(context, "System", "Tapping ($target)...", null)
+        val result = executeTapCoordinatesInternal(target)
+        AgentOverlayManager.complete(result.userMessage)
+        return result
     }
 
     private suspend fun executeClickText(target: String): ExecutionOutcome {

@@ -49,6 +49,13 @@ object ActionIntentParser {
             if (lower == "turn it on" || lower == "turn on" || lower == "enable protection" || lower == "turn on protection") {
                 return ParsedAction(ActionRegistry.INTENT_TOGGLE_SWITCH, "turn on")
             }
+            if (lower == "read screen" || lower == "read device screen" || lower == "read whole device screen" || lower == "what's on screen" || lower == "what is on my screen" || lower == "inspect screen") {
+                return ParsedAction(ActionRegistry.INTENT_READ_SCREEN, "")
+            }
+            if (Regex("""^tap\s+(\d+)\s+(\d+)""").containsMatchIn(lower)) {
+                val coords = Regex("""\d+\s+\d+""").find(lower)?.value ?: ""
+                return ParsedAction(ActionRegistry.INTENT_TAP_COORDINATES, coords)
+            }
 
             // Check if user input is an explicit multi-step command (e.g. "open adguard and close ads and turn it on")
             val decomposed = AgentTaskDecomposer.decompose(candidate)

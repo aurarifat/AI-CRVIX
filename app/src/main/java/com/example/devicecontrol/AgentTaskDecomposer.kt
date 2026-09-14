@@ -83,6 +83,17 @@ object AgentTaskDecomposer {
             }
         }
 
+        // Check if prompt matches natural compound agentic pattern e.g. "open adguard close ads and turn it on"
+        val compoundAgenticMatch = Regex("""^open\s+([a-zA-Z0-9_\-]+)\s+(close\s+ads?.*|dismiss.*|turn\s+.*|enable.*|click\s+.*)""", RegexOption.IGNORE_CASE).find(cleanPrompt)
+        if (compoundAgenticMatch != null) {
+            val targetApp = compoundAgenticMatch.groupValues[1]
+            val remainder = compoundAgenticMatch.groupValues[2]
+            val plan = decomposeAgenticCommand(targetApp, remainder, cleanPrompt)
+            if (plan.tasks.isNotEmpty()) {
+                return plan
+            }
+        }
+
         // 3. Check for explicit numbered task structure: "Task 1: ... Task 2: ... Task 3: ..." or "1. ... 2. ... 3. ..."
         val explicitPlan = parseExplicitNumberedTasks(cleanPrompt)
         if (explicitPlan != null && explicitPlan.tasks.size > 1) {
@@ -124,11 +135,12 @@ object AgentTaskDecomposer {
 
         // Task 1: Open Target App
         if (targetApp.isNotBlank()) {
+            val formattedTarget = targetApp.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
             tasks.add(
                 AgentTaskItem(
                     taskNumber = taskCounter++,
-                    title = "Open $targetApp",
-                    action = ParsedAction(ActionRegistry.INTENT_OPEN_APP, targetApp)
+                    title = "Open $formattedTarget",
+                    action = ParsedAction(ActionRegistry.INTENT_OPEN_APP, formattedTarget)
                 )
             )
         }
@@ -317,6 +329,15 @@ object AgentTaskDecomposer {
 
     private fun mapDescriptionToAction(desc: String): ParsedAction {
         val lower = desc.lowercase().trim()
+
+        if (lower.contains("read screen") || lower.contains("what's on screen") || lower.contains("read device screen") || lower.contains("read whole device screen")) {
+            return ParsedAction(ActionRegistry.INTENT_READ_SCREEN, "")
+        }
+
+        if (Regex("""^tap\s+(\d+)\s+(\d+)""").containsMatchIn(lower)) {
+            val coords = Regex("""\d+\s+\d+""").find(lower)?.value ?: ""
+            return ParsedAction(ActionRegistry.INTENT_TAP_COORDINATES, coords)
+        }
 
         if (lower.contains("close ad") || lower.contains("close ads") || lower.contains("dismiss popup") || lower.contains("skip ad")) {
             return ParsedAction(ActionRegistry.INTENT_DISMISS_POPUP, "")
